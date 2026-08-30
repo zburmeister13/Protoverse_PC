@@ -79,64 +79,77 @@
                       VerticalAlignment="Center" Margin="0,0,20,0"/>
             <ComboBox ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}"
                       Width="120" Margin="0,0,8,0" IsEnabled="{Binding CanSelectRealPort}"/>
-            <Button Content="Refresh" Command="{Binding RefreshPortsCommand}" Width="70" Margin="0,0,8,0"
+            <Button Content="Refresh" Command="{Binding RefreshPortsCommand}" MinWidth="70" Margin="0,0,8,0"
                     IsEnabled="{Binding CanSelectRealPort}"/>
-            <Button Content="Connect" Command="{Binding ConnectCommand}" Width="80" Margin="0,0,4,0"/>
-            <Button Content="Disconnect" Command="{Binding DisconnectCommand}" Width="80" Margin="0,0,20,0"
+            <Button Content="Connect" Command="{Binding ConnectCommand}" MinWidth="80" Margin="0,0,4,0"/>
+            <Button Content="Disconnect" Command="{Binding DisconnectCommand}" MinWidth="80" Margin="0,0,20,0"
                     IsEnabled="{Binding IsConnected}"/>
-            <Button Content="Identify slots" Command="{Binding IdentifySlotsCommand}" Width="100"
+            <Button Content="Identify slots" Command="{Binding IdentifySlotsCommand}" MinWidth="100"
                     IsEnabled="{Binding IsConnected}"/>
         </StackPanel>
 
         <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Margin="0,0,0,8"
                     Foreground="{StaticResource TextSecondaryBrush}"/>
 
-        <!-- Stacked ProtoMod panels -->
-        <ItemsControl Grid.Row="3" ItemsSource="{Binding Panels}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Vertical"/>
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8"
-                            Background="{StaticResource SurfaceBrush}"
-                            Margin="0,0,0,10" Padding="14">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
-                                         Stroke="{StaticResource BorderBrush}" StrokeThickness="1"
-                                         Fill="{Binding SlotState, Converter={StaticResource SlotStateToBrushConverter}}"/>
-                                <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14"/>
+        <!-- Stacked ProtoMod panels. Scrollable now that telemetry panels can hold
+             charts tall enough to exceed the window (see AccelTemp/ElectronicLoad). -->
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Panels}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8"
+                                Background="{StaticResource SurfaceBrush}"
+                                Margin="0,0,4,10" Padding="14">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                             Stroke="{StaticResource BorderBrush}" StrokeThickness="1"
+                                             Fill="{Binding SlotState, Converter={StaticResource SlotStateToBrushConverter}}"/>
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14"/>
+                                </StackPanel>
+                                <ContentPresenter Content="{Binding}"/>
                             </StackPanel>
-                            <ContentPresenter Content="{Binding}"/>
-                        </StackPanel>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
-        <!-- Collapsible raw traffic log: every frame sent/received, hex + decoded -->
-        <Expander Grid.Row="4" Header="Traffic Log" Margin="0,8,0,0"
+        <!-- Collapsible bottom area: raw traffic log (every frame sent/received, hex +
+             decoded) and Help (revision notes + currently supported ProtoMods), as
+             tabs sharing one collapsible section. -->
+        <Expander Grid.Row="4" Header="Traffic Log &amp; Help" Margin="0,8,0,0"
                   IsExpanded="{Binding TrafficLog.IsExpanded}">
-            <DockPanel Height="220">
-                <Button DockPanel.Dock="Top" Content="Clear" Width="60" HorizontalAlignment="Right"
-                        Margin="0,4,0,4" Command="{Binding TrafficLog.ClearCommand}"/>
-                <DataGrid ItemsSource="{Binding TrafficLog.Entries}" AutoGenerateColumns="False"
-                          IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                          FontFamily="Consolas" FontSize="11" RowHeight="20">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Time" Binding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}" Width="90"/>
-                        <DataGridTextColumn Header="Dir" Binding="{Binding DirectionLabel}" Width="40"/>
-                        <DataGridTextColumn Header="Module" Binding="{Binding Module}" Width="90"/>
-                        <DataGridTextColumn Header="MsgType" Binding="{Binding MsgType}" Width="100"/>
-                        <DataGridTextColumn Header="Payload" Binding="{Binding PayloadHex}" Width="150"/>
-                        <DataGridTextColumn Header="Raw Frame" Binding="{Binding RawHex}" Width="*"/>
-                        <DataGridTextColumn Header="Info" Binding="{Binding Info}" Width="150"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </DockPanel>
+            <TabControl>
+                <TabItem Header="Traffic Log">
+                    <DockPanel Height="220">
+                        <Button DockPanel.Dock="Top" Content="Clear" MinWidth="60" HorizontalAlignment="Right"
+                                Margin="0,4,0,4" Command="{Binding TrafficLog.ClearCommand}"/>
+                        <DataGrid ItemsSource="{Binding TrafficLog.Entries}" AutoGenerateColumns="False"
+                                  IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                  FontFamily="Consolas" FontSize="11" RowHeight="20">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Time" Binding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}" Width="90"/>
+                                <DataGridTextColumn Header="Dir" Binding="{Binding DirectionLabel}" Width="40"/>
+                                <DataGridTextColumn Header="Module" Binding="{Binding Module}" Width="90"/>
+                                <DataGridTextColumn Header="MsgType" Binding="{Binding MsgType}" Width="100"/>
+                                <DataGridTextColumn Header="Payload" Binding="{Binding PayloadHex}" Width="150"/>
+                                <DataGridTextColumn Header="Raw Frame" Binding="{Binding RawHex}" Width="*"/>
+                                <DataGridTextColumn Header="Info" Binding="{Binding Info}" Width="150"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+                <TabItem Header="Help">
+                    <views:HelpPanel DataContext="{Binding Help}"/>
+                </TabItem>
+            </TabControl>
         </Expander>
     </Grid>
 </Window>

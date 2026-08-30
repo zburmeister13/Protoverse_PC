@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ProtoVerseApp.Models;
 using ProtoVerseApp.Services;
 
@@ -15,16 +16,23 @@ namespace ProtoVerseApp.ViewModels
     /// </summary>
     public static class ModuleCatalog
     {
-        private static readonly Dictionary<ProtoModId, Func<FrameDispatcher, ModulePanelViewModelBase>> Factories = new()
+        private static readonly Dictionary<ProtoModId, (string DisplayName, Func<FrameDispatcher, ModulePanelViewModelBase> Factory)> Registrations = new()
         {
-            [ProtoModId.BlinkyLed] = dispatcher => new BlinkyLedViewModel(dispatcher),
-            [ProtoModId.AccelTemp] = dispatcher => new AccelTempViewModel(dispatcher),
-            [ProtoModId.ElectronicLoad] = dispatcher => new ElectronicLoadViewModel(dispatcher),
+            [ProtoModId.BlinkyLed] = ("Blinky LED", dispatcher => new BlinkyLedViewModel(dispatcher)),
+            [ProtoModId.AccelTemp] = ("Accelerometer + Temperature", dispatcher => new AccelTempViewModel(dispatcher)),
+            [ProtoModId.ElectronicLoad] = ("Electronic Load", dispatcher => new ElectronicLoadViewModel(dispatcher)),
         };
 
         /// <summary>Builds the panel view model for a detected ProtoMod, or null if
         /// this build has no panel registered for that type yet.</summary>
         public static ModulePanelViewModelBase? TryCreate(ProtoModId moduleId, FrameDispatcher dispatcher) =>
-            Factories.TryGetValue(moduleId, out var factory) ? factory(dispatcher) : null;
+            Registrations.TryGetValue(moduleId, out var reg) ? reg.Factory(dispatcher) : null;
+
+        /// <summary>Every ProtoMod type this build can show a real panel for, with its
+        /// display name - for the Help tab's "Currently supported ProtoMods" list.
+        /// Reads straight from the same registrations TryCreate uses, so it can never
+        /// drift out of sync with what's actually supported.</summary>
+        public static IReadOnlyList<(ProtoModId Id, string DisplayName)> SupportedModules =>
+            Registrations.Select(kvp => (kvp.Key, kvp.Value.DisplayName)).ToList();
     }
 }

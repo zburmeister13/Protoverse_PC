@@ -169,6 +169,59 @@
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         </Style>
 
+        <!-- TabControl (Traffic Log / Help): muted unselected tabs, selected tab
+             visually fused to the content panel below it via a shared background. -->
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <!-- Auto, not *: this template is used inside an Expander with no
+                                     bounded height above it, and a star row under an unconstrained
+                                     parent measures to zero - Auto lets it size to the selected
+                                     tab's own content instead (which sets its own fixed height). -->
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TabPanel Grid.Row="0" IsItemsHost="True" Background="Transparent"/>
+                            <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                    CornerRadius="0,4,4,4" Padding="8">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                   Content="{TemplateBinding SelectedContent}"
+                                                   ContentTemplate="{TemplateBinding SelectedContentTemplate}"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="border" Background="{StaticResource SurfaceAltBrush}" CornerRadius="4,4,0,0"
+                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,1,1,0"
+                                Margin="0,0,4,0" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- DataGrid (Traffic Log): dark rows, teal-tinted header. -->
         <Style TargetType="DataGrid">
             <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>

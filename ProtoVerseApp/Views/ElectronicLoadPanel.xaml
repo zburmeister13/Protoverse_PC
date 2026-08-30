@@ -2,17 +2,27 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:ProtoVerseApp.ViewModels"
+             xmlns:oxy="http://oxyplot.org/wpf"
              d:DataContext="{d:DesignInstance Type=vm:ElectronicLoadViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008/mc"
              mc:Ignorable="d"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
-    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-        <TextBlock Text="Current limit (mA):" VerticalAlignment="Center" Margin="0,0,6,0"/>
-        <TextBox Text="{Binding CurrentLimitMa, UpdateSourceTrigger=PropertyChanged}" Width="70" Margin="0,0,8,0"/>
-        <Button Content="Apply" Command="{Binding ApplyCurrentLimitCommand}" Width="70" Margin="0,0,20,0"/>
-        <TextBlock Text="V:" Margin="0,0,4,0"/>
-        <TextBlock Text="{Binding MeasuredVoltage, StringFormat={}{0:F2} V}" Width="70" FontWeight="Bold"/>
-        <TextBlock Text="I:" Margin="12,0,4,0"/>
-        <TextBlock Text="{Binding MeasuredCurrentMa, StringFormat={}{0:F0} mA}" Width="70" FontWeight="Bold"/>
+    <StackPanel>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+            <TextBlock Text="Current limit (mA):" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox Text="{Binding CurrentLimitMa, UpdateSourceTrigger=PropertyChanged}" Width="70" Margin="0,0,8,0"/>
+            <Button Content="Apply" Command="{Binding ApplyCurrentLimitCommand}" MinWidth="70" Margin="0,0,20,0"/>
+            <TextBlock Text="V:" Margin="0,0,4,0"/>
+            <TextBlock Text="{Binding MeasuredVoltage, StringFormat={}{0:F2} V}" Width="70" FontWeight="Bold"/>
+            <TextBlock Text="I:" Margin="12,0,4,0"/>
+            <TextBlock Text="{Binding MeasuredCurrentMa, StringFormat={}{0:F0} mA}" Width="70" FontWeight="Bold"/>
+        </StackPanel>
+
+        <!--
+            Live trend-line chart, built against Simulator mode's fake telemetry (see
+            ElectronicLoadViewModel's doc comment) so this UI doesn't have to wait on
+            firmware defining the real payload format.
+        -->
+        <oxy:PlotView Model="{Binding PlotModel}" Height="180"/>
     </StackPanel>
 </UserControl>

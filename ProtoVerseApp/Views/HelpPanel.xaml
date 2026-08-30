@@ -1,0 +1,44 @@
+<UserControl x:Class="ProtoVerseApp.Views.HelpPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ProtoVerseApp.ViewModels"
+             d:DataContext="{d:DesignInstance Type=vm:HelpViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/mc"
+             mc:Ignorable="d"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Height="220">
+        <StackPanel Margin="4">
+            <TextBlock Text="Currently supported ProtoMods" FontWeight="Bold" Margin="0,0,0,6"/>
+            <ItemsControl ItemsSource="{Binding SupportedModules}" Margin="0,0,0,4">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Margin="0,0,0,2">
+                            <Run Text="•  "/>
+                            <Run Text="{Binding DisplayName, Mode=OneWay}" FontWeight="SemiBold"/>
+                            <Run Text=" — circuit code "/>
+                            <Run Text="{Binding CircuitCode, Mode=OneWay, TargetNullValue=?}" FontFamily="Consolas"/>
+                            <Run Text=" ("/>
+                            <Run Text="{Binding Id, Mode=OneWay}"/>
+                            <Run Text=")"/>
+                        </TextBlock>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock TextWrapping="Wrap" FontStyle="Italic" FontSize="11" Margin="0,0,0,16"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="Circuit codes are the identity string each ProtoMod's onboard EEPROM reports - useful for confirming a physical board actually matches what it's labeled as here."/>
+
+            <TextBlock Text="What's changed" FontWeight="Bold" Margin="0,0,0,6"/>
+            <ItemsControl ItemsSource="{Binding RevisionNotes}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Margin="0,0,0,4" TextWrapping="Wrap">
+                            <Run Text="•  "/>
+                            <Run Text="{Binding Mode=OneWay}"/>
+                        </TextBlock>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

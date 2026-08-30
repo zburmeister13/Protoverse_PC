@@ -36,12 +36,12 @@
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
             <Button Content="Toggle"
                     Command="{Binding ToggleCommand}"
-                    Width="90" Margin="0,0,12,0"/>
+                    MinWidth="90" Margin="0,0,12,0"/>
             <Ellipse Width="18" Height="18" Margin="0,0,16,0"
                      Fill="{Binding IsOn, Converter={StaticResource BoolToBrushConverter}}"/>
             <TextBlock Text="Blink rate (ms):" VerticalAlignment="Center" Margin="0,0,6,0"/>
             <TextBox Text="{Binding BlinkRateMs, UpdateSourceTrigger=PropertyChanged}" Width="70" Margin="0,0,12,0"/>
-            <Button Content="Apply" Command="{Binding ApplyBlinkRateCommand}" Width="70"/>
+            <Button Content="Apply" Command="{Binding ApplyBlinkRateCommand}" MinWidth="70"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">

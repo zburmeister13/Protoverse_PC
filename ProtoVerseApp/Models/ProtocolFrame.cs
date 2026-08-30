@@ -7,9 +7,13 @@ namespace ProtoVerseApp.Models
     /// One frame on the wire between the PC app and ProtoCore.
     ///
     /// Layout:
-    ///   [STX 0x02] [ProtoModId] [MsgType] [Length] [Payload x Length] [Checksum] [ETX 0x03]
+    ///   [STX 0x02] [ProtoModId_lo] [ProtoModId_hi] [MsgType] [Length] [Payload x Length] [Checksum] [ETX 0x03]
     ///
-    /// Checksum = XOR of ProtoModId, MsgType, Length, and every payload byte.
+    /// ProtoModId is 2 bytes, little-endian (widened from 1 byte on 2026-08-30 to
+    /// support a 1,000+-ProtoMod catalog - see the doc comment on ProtoModId itself).
+    ///
+    /// Checksum = XOR of ProtoModId_lo, ProtoModId_hi, MsgType, Length, and every
+    /// payload byte.
     ///
     /// Note: payload bytes are NOT escaped/byte-stuffed in this first version, so a
     /// payload that happens to contain 0x02 or 0x03 will not desync framing on its
@@ -46,20 +50,24 @@ namespace ProtoVerseApp.Models
         /// <summary>Serializes this frame to the exact bytes to send on the wire.</summary>
         public byte[] Encode()
         {
-            var buffer = new byte[6 + Payload.Length];
+            var buffer = new byte[7 + Payload.Length];
+            byte idLo = (byte)((ushort)ModuleId & 0xFF);
+            byte idHi = (byte)((ushort)ModuleId >> 8);
+
             buffer[0] = Stx;
-            buffer[1] = (byte)ModuleId;
-            buffer[2] = (byte)Type;
-            buffer[3] = (byte)Payload.Length;
-            Array.Copy(Payload, 0, buffer, 4, Payload.Length);
-            buffer[4 + Payload.Length] = ComputeChecksum((byte)ModuleId, (byte)Type, (byte)Payload.Length, Payload);
-            buffer[5 + Payload.Length] = Etx;
+            buffer[1] = idLo;
+            buffer[2] = idHi;
+            buffer[3] = (byte)Type;
+            buffer[4] = (byte)Payload.Length;
+            Array.Copy(Payload, 0, buffer, 5, Payload.Length);
+            buffer[5 + Payload.Length] = ComputeChecksum(idLo, idHi, (byte)Type, (byte)Payload.Length, Payload);
+            buffer[6 + Payload.Length] = Etx;
             return buffer;
         }
 
-        private static byte ComputeChecksum(byte moduleId, byte msgType, byte length, byte[] payload)
+        private static byte ComputeChecksum(byte idLo, byte idHi, byte msgType, byte length, byte[] payload)
         {
-            byte checksum = (byte)(moduleId ^ msgType ^ length);
+            byte checksum = (byte)(idLo ^ idHi ^ msgType ^ length);
             foreach (var b in payload)
                 checksum ^= b;
             return checksum;
@@ -79,10 +87,12 @@ namespace ProtoVerseApp.Models
     {
         private enum State { WaitingForStx, ReadingHeader, ReadingPayload, ReadingChecksum, ReadingEtx }
 
+        private const int HeaderLength = 4; // ProtoModId_lo, ProtoModId_hi, MsgType, Length
+
         private State _state = State.WaitingForStx;
-        private readonly List<byte> _headerBuffer = new(3);
+        private readonly List<byte> _headerBuffer = new(HeaderLength);
         private readonly List<byte> _payloadBuffer = new();
-        private byte _moduleId;
+        private ushort _moduleId;
         private byte _msgType;
         private byte _length;
         private byte _checksum;
@@ -114,11 +124,11 @@ namespace ProtoVerseApp.Models
 
                 case State.ReadingHeader:
                     _headerBuffer.Add(b);
-                    if (_headerBuffer.Count == 3)
+                    if (_headerBuffer.Count == HeaderLength)
                     {
-                        _moduleId = _headerBuffer[0];
-                        _msgType = _headerBuffer[1];
-                        _length = _headerBuffer[2];
+                        _moduleId = (ushort)(_headerBuffer[0] | (_headerBuffer[1] << 8));
+                        _msgType = _headerBuffer[2];
+                        _length = _headerBuffer[3];
                         _payloadBuffer.Clear();
                         _state = _length == 0 ? State.ReadingChecksum : State.ReadingPayload;
                     }
@@ -143,7 +153,9 @@ namespace ProtoVerseApp.Models
                         break;
                     }
 
-                    byte expected = (byte)(_moduleId ^ _msgType ^ _length);
+                    byte idLo = (byte)(_moduleId & 0xFF);
+                    byte idHi = (byte)(_moduleId >> 8);
+                    byte expected = (byte)(idLo ^ idHi ^ _msgType ^ _length);
                     foreach (var pb in _payloadBuffer)
                         expected ^= pb;
 

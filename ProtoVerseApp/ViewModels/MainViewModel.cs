@@ -30,6 +30,7 @@ namespace ProtoVerseApp.ViewModels
         public ObservableCollection<string> AvailablePorts { get; } = new();
         public ObservableCollection<object> Panels { get; } = new();
         public TrafficLogViewModel TrafficLog { get; }
+        public HelpViewModel Help { get; } = new();
 
         [ObservableProperty]
         private string? _selectedPort;
@@ -151,19 +152,41 @@ namespace ProtoVerseApp.ViewModels
             if (frame.ModuleId != ProtoModId.Core || frame.Type != MsgType.PresenceReport)
                 return;
 
-            // Convention: payload is a list of ProtoModId bytes currently present.
-            // Distinct + capped defensively - the hardware only has three slots, but
-            // nothing stops a malformed report from claiming otherwise.
-            var present = frame.Payload.Select(b => (ProtoModId)b).Distinct().Take(SlotCount).ToList();
+            // Convention (as of 2026-08-30): payload is a FIXED SlotCount*2-byte array
+            // - exactly one ProtoModId per physical slot, 2 bytes little-endian each,
+            // always in slot order (payload[0..1] = slot 0, [2..3] = slot 1, ...). An
+            // empty slot reports ProtoModId.None rather than being omitted. This
+            // replaces an earlier skip-empty-slots format that couldn't distinguish
+            // "BlinkyLed in slot 0" from "BlinkyLed in slot 1, slots 0/2 empty" - both
+            // produced the same single-entry payload, so a module in any slot but the
+            // first always rendered in this app's first panel regardless of which
+            // physical slot it was actually in. Agreed and fixed cross-session with
+            // the firmware session after the user hit exactly that mismatch.
+            if (frame.Payload.Length != SlotCount * 2)
+            {
+                StatusMessage = $"Malformed PresenceReport: expected {SlotCount * 2} payload bytes, got {frame.Payload.Length}";
+                return;
+            }
 
             DetachModulePanels();
             Panels.Clear();
-            foreach (var moduleId in present)
-                Panels.Add(ModuleCatalog.TryCreate(moduleId, _dispatcher) ?? (object)new UnknownModuleViewModel(moduleId));
-            while (Panels.Count < SlotCount)
-                Panels.Add(new EmptySlotViewModel());
 
-            StatusMessage = $"{present.Count} ProtoMod(s) detected";
+            int detectedCount = 0;
+            for (int slot = 0; slot < SlotCount; slot++)
+            {
+                var moduleId = (ProtoModId)(ushort)(frame.Payload[slot * 2] | (frame.Payload[slot * 2 + 1] << 8));
+                if (moduleId == ProtoModId.None)
+                {
+                    Panels.Add(new EmptySlotViewModel());
+                }
+                else
+                {
+                    detectedCount++;
+                    Panels.Add(ModuleCatalog.TryCreate(moduleId, _dispatcher) ?? (object)new UnknownModuleViewModel(moduleId));
+                }
+            }
+
+            StatusMessage = $"{detectedCount} ProtoMod(s) detected";
         }
 
         /// <summary>Unsubscribes every currently-displayed module panel from the

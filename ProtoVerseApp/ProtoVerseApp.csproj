@@ -13,6 +13,8 @@
     <!-- MVVM Toolkit: gives us ObservableObject / [ObservableProperty] / RelayCommand
          without hand-writing INotifyPropertyChanged boilerplate for every panel. -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <!-- Live trend-line charts for telemetry panels (Accel+Temp, Electronic Load). -->
+    <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
   </ItemGroup>
 

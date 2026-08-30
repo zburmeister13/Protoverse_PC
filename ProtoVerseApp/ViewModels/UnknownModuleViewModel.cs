@@ -18,7 +18,7 @@ namespace ProtoVerseApp.ViewModels
         public UnknownModuleViewModel(ProtoModId moduleId)
         {
             ModuleId = moduleId;
-            DisplayName = $"Unsupported module ({moduleId}, 0x{(byte)moduleId:X2})";
+            DisplayName = $"Unsupported module ({moduleId}, 0x{(ushort)moduleId:X4})";
         }
     }
 }

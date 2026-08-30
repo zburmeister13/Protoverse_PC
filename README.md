@@ -24,18 +24,22 @@ I'll fix it.
 ## Wire protocol (v1, defined in `Models/ProtocolFrame.cs`)
 
 ```
-[STX 0x02] [ProtoModId] [MsgType] [Length] [Payload...] [Checksum] [ETX 0x03]
+[STX 0x02] [ProtoModId_lo] [ProtoModId_hi] [MsgType] [Length] [Payload...] [Checksum] [ETX 0x03]
 ```
 
-- **ProtoModId** (`Models/ProtoModId.cs`) — fixed vocabulary shared with firmware:
-  `0x01` BlinkyLed, `0x02` AccelTemp, `0x03` ElectronicLoad, `0xF0` Core (ProtoCore
-  itself, used for slot identification). Add new IDs here *and* in firmware together
-  whenever a new ProtoMod type is introduced.
+- **ProtoModId** (`Models/ProtoModId.cs`) — 2 bytes, little-endian (widened from 1
+  byte on 2026-08-30 to support a catalog expected to eventually exceed 1,000
+  ProtoMod types — see the doc comment on `ProtoModId` for why). Fixed vocabulary
+  shared with firmware: `0x0001` BlinkyLed, `0x0002` AccelTemp, `0x0003`
+  ElectronicLoad, `0xFFF0` Core (ProtoCore itself, used for slot identification).
+  Add new IDs here *and* in firmware together whenever a new ProtoMod type is
+  introduced.
 - **MsgType** (`Models/MsgType.cs`) — Command, Response, PresenceRequest,
   PresenceReport, StreamData, Error.
-- **Checksum** — XOR of ProtoModId, MsgType, Length, and every payload byte. No CRC,
-  no byte-stuffing/escaping yet — fine at this scale, worth revisiting if streamed
-  data (e.g. a DDS sweep capture) turns out to need more robustness.
+- **Checksum** — XOR of both ProtoModId bytes, MsgType, Length, and every payload
+  byte. No CRC, no byte-stuffing/escaping yet — fine at this scale, worth
+  revisiting if streamed data (e.g. a DDS sweep capture) turns out to need more
+  robustness.
 - **Max payload** — 250 bytes per frame. Anything bigger (bulk waveform data) should
   be split across multiple `StreamData` frames rather than growing this.
 
@@ -47,8 +51,8 @@ in one serial read, since it usually won't.
 
 Sends a `PresenceRequest` addressed to `Core`. ProtoCore is expected to reply with a
 `PresenceReport` (also addressed to `Core`) whose payload is a list of the
-`ProtoModId` bytes currently present (read from each ProtoMod's EEPROM, which you
-already have working). `MainViewModel.OnFrameReceived` rebuilds the three slots from
+`ProtoModId` values currently present (2 bytes little-endian each, read from each
+ProtoMod's EEPROM, which you already have working). `MainViewModel.OnFrameReceived` rebuilds the three slots from
 that list: each present `ProtoModId` becomes a real panel (via `ModuleCatalog`, or an
 "Unsupported module" placeholder if this build doesn't have a panel for that type),
 and any slot left over becomes "Empty." The same handling also fires on an unsolicited
@@ -75,8 +79,9 @@ hot-swap without waiting for ProtoCore's unsolicited report.
 - Accel+Temp: the whole payload layout in `AccelTempViewModel.OnFrameReceived` —
   right now it assumes 1 byte temp + 3×int16 accel, which is a guess.
 - Electronic Load: same story in `ElectronicLoadViewModel.cs`.
-- `PresenceReport` payload shape (currently: flat list of ProtoModId bytes — simple,
-  but confirm it matches what the firmware actually sends).
+- `PresenceReport` payload shape (currently: flat list of 2-byte little-endian
+  ProtoModId values — simple, but confirm it matches what the firmware actually
+  sends).
 
 ## Adding a new ProtoMod's panel
 

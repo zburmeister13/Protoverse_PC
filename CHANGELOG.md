@@ -612,3 +612,426 @@ reasonable guess.
   occasionally delaying a step by a few ms), not the sequence itself.
 - `CLAUDE.md` — updated to say "confirmed exact match" instead of leaving it
   as an open/unverified assumption.
+
+### 19. Flag ProtoModId's byte-width ceiling as a blocker for the 1,000+-ProtoMod goal
+**2026-08-30, 02:22 CDT**
+
+**Prompt:** "both you and the other agent need to be fully aware that the
+structure of both programs should prioritize modularity as there could be
+1000+ different protomods installed on the hardware side. let the other
+agent know this and both of you need to act to prioritize this moving
+forward."
+
+**Purpose:** Make this a standing, documented priority rather than something
+that could get silently deprioritized in a future session, and find whatever
+concrete conflicts already exist with it rather than just writing a vague
+principle down. The rest of the architecture (dynamic slot population,
+`ModuleCatalog`'s one-line-per-type registration, graceful degradation for
+an unrecognized type) was already built with this in mind — the one real,
+provable conflict is `ProtoModId`'s wire width.
+
+**Changes:**
+- `Models/ProtoModId.cs` — added a doc comment flagging that `ProtoModId` is
+  a single byte on the wire (`ProtocolFrame.Encode()`/`ProtocolFrameReader`
+  both treat it as one byte), so only ~253 values are usable after reserved
+  IDs (`None`/`Core`/`Broadcast`) — nowhere near 1,000+. Not fixed yet since
+  it's a wire-format change requiring firmware agreement first.
+- `CLAUDE.md` — added a "Platform decisions" entry recording the
+  1,000+-ProtoMod modularity priority as user-directed and standing, plus
+  the `ProtoModId` conflict and proposed fix (widen to 2 bytes, pending
+  firmware agreement).
+- Messaged the firmware session with this finding and a concrete proposal
+  (widen `ProtoModId` to a 2-byte little-endian field) rather than a vague
+  "keep modularity in mind" — asked for their read before either side
+  implements anything, since it's a breaking wire-format change and both
+  sides have already built and validated parsers around the 1-byte version.
+  No code changes made to the wire format yet on either side.
+
+### 20. Widen ProtoModId to 2 bytes on the PC side, matching firmware's implementation
+**2026-08-30, 02:30 CDT**
+
+**Prompt:** none — firmware session confirmed the 1,000+ priority directly
+with the user, agreed with the flat-16-bit-ID proposal from entry 19, and
+implemented it firmware-side; this entry is the matching PC-side
+implementation firmware asked for.
+
+**Purpose:** Match firmware's now-implemented wire format bit-for-bit before
+either side is disconnected/out of sync - the frame header grew from 3 to 4
+bytes and `PresenceReport`'s payload shape changed from 1 byte per ID to 2.
+
+**Changes:**
+- `Models/ProtoModId.cs` — widened from `byte` to `ushort`. Kept
+  BlinkyLed/AccelTemp/ElectronicLoad at their existing low values (`0x0001`-
+  `0x0003`) per firmware's lead; moved `Core` `0xF0`→`0xFFF0` and `Broadcast`
+  `0xFF`→`0xFFFF` to the top of the range, matching firmware's convention of
+  keeping reserved/system addresses visually distinct from catalog IDs.
+- `Models/ProtocolFrame.cs` — `Encode()`/`ComputeChecksum()` now write/XOR 2
+  ID bytes (little-endian) instead of 1; buffer size 6→7 plus payload.
+  `ProtocolFrameReader`'s header state now collects 4 bytes instead of 3
+  before transitioning to payload, and reconstructs `_moduleId` as a
+  little-endian `ushort` from the first two.
+- `ViewModels/MainViewModel.cs` — `PresenceReport` parsing now reads 2-byte
+  little-endian pairs from the payload instead of one `ProtoModId` per byte.
+- `Services/MockSerialService.cs` — `PresenceReport` reply now emits 2 bytes
+  per `ProtoModId` instead of 1, so Simulator mode keeps working against the
+  new format.
+- `ViewModels/UnknownModuleViewModel.cs` — fixed a display bug this change
+  would otherwise have introduced: its hex readout cast to `(byte)`, which
+  would've silently truncated any ID above `0xFF` to its low byte and shown
+  the wrong value. Now casts to `(ushort)` and formats as 4 hex digits.
+- `README.md` — updated the frame diagram, ProtoModId/checksum description,
+  and the two other mentions of "ProtoModId bytes" to reflect the 2-byte
+  little-endian format.
+- Verified live via UI Automation (not just build-succeeded): connected in
+  Simulator mode, confirmed "3 ProtoMod(s) detected" and all three panels
+  populated via the new 4-byte-header `PresenceReport`, then clicked Blinky's
+  Toggle and confirmed Mode updated to "Animated" from the device's `Response`
+  - proving both the presence path and the Command/Response path encode,
+  checksum, and decode correctly under the new format. No checksum/framing
+  errors appeared anywhere in the traffic log during testing.
+- Reported back to the firmware session that the PC side now matches.
+
+### 21. Live trend-line charts for Accel+Temp and Electronic Load, decoupled from firmware
+**2026-08-30, 12:50 CDT**
+
+**Prompt:** "Use Simulator mode to design the Accel+Temp and Electronic Load
+UX now, decoupled from firmware. The placeholder payload formats are
+blocking real data parsing, but they're not blocking UI design. Simulator
+mode already fakes telemetry — extend it to fake plausible Accel+Temp and
+Electronic Load values, then build the actual charts/interaction (OxyPlot or
+LiveCharts2, live trend lines) against that fake data now. When firmware
+defines the real payload later, it's a parsing swap, not a UI build."
+
+**Purpose:** Both telemetry panels only showed a single live numeric
+readout each - no sense of a trend over time, and no reason that had to wait
+on firmware's still-undefined payload formats, since Simulator mode already
+generates plausible telemetry values today.
+
+**Changes:**
+- Added `OxyPlot.Wpf` (2.2.0) as a NuGet dependency.
+- `Charts/ChartTheme.cs` (new) — shared helper building dark-themed
+  `PlotModel`s matching the ProtoVerse palette (OxyPlot's `PlotModel` is a
+  plain C# object, not a WPF `DependencyObject`, so it can't bind to a
+  `StaticResource` brush - hex values are duplicated here the same way
+  `BoolToBrushConverter`/`SlotStateToBrushConverter` already do, per
+  `CLAUDE.md`'s "Branded dark theme" note). Provides a single-Y-axis model
+  factory, a dual-Y-axis factory (for series on very different scales, e.g.
+  volts vs. milliamps), a themed line-series helper, an opt-in legend helper
+  (only enabled for multi-series charts - a single-series chart's axis title
+  already says what it is), and a rolling-window point-append helper that
+  trims the oldest point once a chart exceeds its history cap, so a chart
+  left running for a long session doesn't grow unbounded.
+- `ViewModels/AccelTempViewModel.cs` — added `TempPlotModel` (1 line) and
+  `AccelPlotModel` (X/Y/Z, 3 lines + legend), ~120-point (~2 min at ~1
+  sample/sec) rolling history on an elapsed-seconds X axis. `AppendToCharts()`
+  is a separate step from the byte-parsing in `OnFrameReceived` - it just
+  plots whatever `TemperatureC`/`AccelXg/Yg/Zg` currently hold, so swapping
+  in the real payload format later only touches the parsing, not this.
+- `ViewModels/ElectronicLoadViewModel.cs` — added a dual-axis `PlotModel`
+  (Voltage on the left axis, Current on the right - sharing one axis would
+  flatten one of them given how different their scales are), same
+  decoupled-`AppendToChart()` pattern.
+- `Views/AccelTempPanel.xaml` / `Views/ElectronicLoadPanel.xaml` — added
+  `oxy:PlotView` controls below the existing numeric readouts.
+- `Views/MainWindow.xaml` — wrapped the panel `ItemsControl` in a
+  `ScrollViewer` (`VerticalScrollBarVisibility="Auto"`), since telemetry
+  panels are now tall enough with charts to exceed the window on smaller
+  screens; the Traffic Log expander stays outside the scroll region.
+- Did not change `MockSerialService`'s telemetry generation - it already
+  produces plausible values (sine/cosine-based temp/accel, a load response
+  curve for voltage/current) at a real streaming cadence, which is exactly
+  what the charts needed; no changes were necessary there.
+- Verified live via UI Automation (not just build-succeeded): connected in
+  Simulator mode, confirmed both panels' charts rendered with correct axis
+  titles/legends, then waited ~5s for telemetry to stream and confirmed the
+  numeric readouts *and* every chart axis auto-ranged to real values (e.g.
+  Temperature axis showing 22-24°C instead of a 0-100 placeholder range,
+  Electronic Load's dual axes showing ~4.8V and ~100mA independently) -
+  proving the whole live-charting path actually works end-to-end against
+  Simulator mode's fake telemetry, not just that it compiles.
+
+### 22. Replace the accel X/Y/Z line chart with a bubble-level XY plot + Z fill gauge
+**2026-08-30, 12:55 CDT**
+
+**Prompt:** "I want the IMU graph to be two parts. A 2D plot that plots x and
+y (when both x and y are near 0 then the dot is in the center). Z should be
+a vertical bar type appearance with -1g being the middle point - increased z
+accel would fill the bar. decreased (less than minus 1 g) would cause the
+bar to go lower."
+
+**Purpose:** The 3-line X/Y/Z trend chart from entry 21 didn't read
+intuitively as "which way is the board tilted right now" - a 2D position and
+a fill gauge map much more directly onto what those two axis pairs
+physically mean (X/Y = tilt off level, Z = how much the board is being
+pushed against/away from gravity).
+
+**Changes:**
+- `Charts/ChartTheme.cs` — added `CreateXyPlotModel(range)` (fixed
+  `[-range, range]` axes on both X and Y, not auto-ranging, so the origin is
+  always the exact visual center; a distinct crosshair gridline through zero
+  on each axis via `ExtraGridlines`), `AddXyMarker`/`SetXyPoint` (a single
+  `ScatterSeries` point, replaced wholesale each update rather than
+  accumulated like a line series - a level indicator only has one current
+  position). Added `CreateVerticalGaugeModel(title, minY, maxY)` (a value-only
+  Y axis, X axis hidden since there's nothing to categorize) and
+  `AddVerticalGaugeBar`/`SetGaugeValue`, built on OxyPlot's `LinearBarSeries`
+  with its `BaseValue` set to the gauge's center - that's what makes the bar
+  fill *from* that baseline rather than from zero, growing up above it and
+  down below it.
+- `ViewModels/AccelTempViewModel.cs` — replaced `AccelPlotModel` (the 3-line
+  chart) with `XyPlotModel` (range ±1.5g, comfortably framing the
+  simulator's ±1g sine/cosine values) and `ZGaugeModel` (centered on -1g per
+  spec, ±1g half-range, so the gauge's fixed axis is exactly -2g to 0g).
+  `AppendToCharts()` now calls `SetXyPoint`/`SetGaugeValue` instead of
+  appending to a rolling history for these two - matches what they actually
+  are (an instantaneous reading, not a trend).
+- `Views/AccelTempPanel.xaml` — 3-column layout now: Temperature trend line,
+  XY bubble-level plot, Z gauge (relative widths 2:1.3:0.7, reflecting that
+  the gauge only ever needs to be narrow).
+- Verified live via UI Automation: connected in Simulator mode, waited for
+  telemetry, and confirmed the X/Y axes both span exactly [-1.5, 1.5]
+  (rendering major ticks at -1/0/1) and the Z axis spans exactly [-2, 0]
+  with -1 sitting at the middle tick, matching the spec precisely - not just
+  that the panel renders without error.
+
+### 23. Fix clipped button text; add a Help tab (revision notes + supported ProtoMods)
+**2026-08-30, 13:13 CDT**
+
+**Prompt:** "some of the text on the top bars is not fully visible - i.e.
+missing letters. Also add a help tab that documents single sentance
+revisions and that sort of thing like a change log. Also indicates currently
+supported protomods."
+
+**Purpose:** Two separate items - a real rendering bug from entry 12's dark
+theme, and a new end-user-facing Help surface distinct from CHANGELOG.md
+(which is aimed at whoever develops this app, not whoever uses it).
+
+**Changes - clipped text:**
+- Root cause: entry 12's branded `Button` style added `FontWeight="SemiBold"`
+  and `Padding="12,6"` inside a custom `ControlTemplate`, but several buttons
+  still had their original fixed pixel `Width` values chosen before that
+  style existed (e.g. `Disconnect` at `Width="80"` only leaves 56px for text
+  after padding) - content wider than the fixed width gets silently clipped
+  during Arrange rather than the button growing to fit, so trailing letters
+  disappeared. Confirmed live: `Disconnect`'s rendered width was exactly
+  `80.0` before the fix and grew to `84.0` after, matching the diagnosis.
+- Changed every fixed-width `Button` (`Refresh`, `Connect`, `Disconnect`,
+  `Identify slots` in `MainWindow.xaml`; `Toggle`/blink-rate `Apply` in
+  `BlinkyLedPanel.xaml`; `Apply` in `ElectronicLoadPanel.xaml`; `Clear` in
+  the traffic log) from `Width` to `MinWidth` - buttons now grow to fit
+  their content instead of clipping it, while still lining up consistently
+  when the old fixed value already had enough room.
+
+**Changes - Help tab:**
+- `ViewModels/ModuleCatalog.cs` — restructured its factory dictionary into
+  `(DisplayName, Factory)` registrations and added `SupportedModules`, so
+  "what's supported" has exactly one source of truth shared by both
+  `TryCreate` and the new Help tab - it can't drift out of sync with what's
+  actually registered.
+- `ViewModels/HelpViewModel.cs` (new) — `RevisionNotes` (a hand-maintained,
+  newest-first list of short, single-sentence, end-user-facing summaries -
+  deliberately not a 1:1 mirror of every CHANGELOG.md entry, since routine
+  internal/refactor entries don't mean anything to someone just using the
+  app) and `SupportedModules` (read straight from `ModuleCatalog`).
+- `Views/HelpPanel.xaml`/`.xaml.cs` (new) — lists both, matching the app's
+  existing dark theme.
+- `Views/MainWindow.xaml` — the bottom Expander (previously "Traffic Log"
+  only) now hosts a `TabControl` with "Traffic Log" (existing content,
+  unchanged) and "Help" tabs, still collapsed by default same as before.
+- `App.xaml` — added dark-themed `TabControl`/`TabItem` styles (unselected
+  tabs muted, selected tab visually fused to the content panel below it).
+  Hit and fixed two real bugs building this, both worth remembering for any
+  future custom `TabControl` template: (1) the content-hosting row was
+  initially `Height="*"` - inside an `Expander` with no bounded height above
+  it, a star row measures to zero, so nothing rendered at all; changed to
+  `Auto` so it sizes to the selected tab's own content instead. (2) the
+  usual `ContentPresenter ContentSource="SelectedContent"` shortcut
+  (Microsoft's own default `TabControl` template uses exactly this) did not
+  render any content in this app despite no XAML errors and a correctly
+  `Expanded`/tab-`Selected` state - switched to an explicit
+  `Content="{TemplateBinding SelectedContent}"` /
+  `ContentTemplate="{TemplateBinding SelectedContentTemplate}"` binding
+  (plus `x:Name="PART_SelectedContentHost"`, matching the conventional part
+  name), which resolved it immediately. Root cause of that second one wasn't
+  tracked down further since the explicit binding is equally correct and
+  unambiguous either way.
+- Verified live via UI Automation at each step (not just build-succeeded) -
+  this was essential here, since the first two fix attempts (the `Height`
+  change alone, and before that nothing) both looked plausible but the tab
+  content silently failed to render both times; only re-checking after each
+  change caught it. Final state confirmed: `Disconnect` button no longer
+  clipped, Traffic Log tab shows its `DataGrid` and `Clear` button, Help tab
+  shows all 3 supported ProtoMods (Blinky LED, Accelerometer + Temperature,
+  Electronic Load) and all 9 revision-note lines.
+
+### 24. Fix: a module in any slot but the first always rendered in the first panel
+**2026-08-30, 13:38 CDT**
+
+**Prompt:** relayed from the firmware session (a new session,
+`workspace-1-19-0-0d` - the previous firmware session that coordinated
+entries 9-22 had ended by this point). The user had reported a real
+hardware/UI mismatch: a Blinky board physically in ProtoCore's middle slot
+was rendering in this app's *first* panel.
+
+**Purpose:** Root cause, found by the firmware session and verified against
+this app's actual code before touching anything: `PresenceReport`'s payload
+only ever listed IDs for *occupied* slots, with no slot index anywhere in
+the payload - so "BlinkyLed in slot 0" and "BlinkyLed in slot 1 (0/2 empty)"
+produced an identical single-entry payload on the wire, indistinguishable
+from each other. `MainViewModel.OnFrameReceived` then just appended arrivals
+in list order starting at `Panels[0]`, so a module always landed in the
+first panel regardless of which physical slot it actually occupied.
+
+**Changes:**
+- Firmware (separate `Protocore` codebase/session, already done before this
+  entry): `PresenceReport`'s payload is now a **fixed** `SlotCount*2`-byte
+  array - exactly one `ProtoModId` per physical slot, always in slot order,
+  with an empty slot reporting `ProtoModId.None` instead of being omitted.
+- `ViewModels/MainViewModel.cs` — `OnFrameReceived` rewritten to match:
+  reads exactly `SlotCount` slots directly off the payload by index and
+  assigns each straight to `Panels[slot]` (`None` → `EmptySlotViewModel`,
+  otherwise `ModuleCatalog.TryCreate` or `UnknownModuleViewModel`, same as
+  before). Removed the old `.Distinct().Take(SlotCount)` filtering entirely
+  - `None` can legitimately repeat across multiple empty slots now, and
+  filtering it out is exactly the bug. A payload that isn't exactly
+  `SlotCount*2` bytes is now rejected with a status message rather than
+  partially interpreted, since the format is fixed-size, not "at least."
+- Verified live via UI Automation, not just build-succeeded, and not just
+  the easy "everything populated" case: first a regression check (all 3
+  slots occupied, unchanged `MockSerialService` default) confirmed panels
+  still render in the correct order. Then, since that alone wouldn't catch
+  this specific bug, temporarily reconfigured `MockSerialService`'s
+  `InstalledMods` to the *exact* reported scenario - Blinky in slot 1 only,
+  slots 0 and 2 empty - rebuilt, and confirmed Blinky now renders as the
+  **second** panel with "No module detected" correctly above and below it
+  (previously would have rendered first). Reverted the simulator back to
+  its normal full-population default afterward and rebuilt again to confirm
+  that still works too.
+- Reported back to the firmware session that the PC side now matches and is
+  verified against the exact scenario the user hit.
+
+### 25. Diagnose: Refresh can't see the board's COM port after a reflash
+**2026-08-30, 13:49 CDT**
+
+**Prompt:** "If I reflash the HW with updated FW it seems that the app can
+no longer see that com port after hitting refresh"
+
+**Purpose:** First real-hardware session (everything prior was Simulator
+mode only). Diagnosed against the actual machine state rather than guessing
+- checked what Windows itself currently sees before assuming the app's
+Refresh logic was broken.
+
+**Changes:**
+- No code changes - `SerialService.GetAvailablePorts()`/Refresh already just
+  calls `SerialPort.GetPortNames()`, and that was confirmed to be accurately
+  reporting what Windows sees (only COM1, the built-in port). Not an app bug.
+- Diagnosed via `Get-WinEvent`/`Get-PnpDevice`: Windows's PnP event log
+  showed `USB\VID_0483&PID_5740\... requires further installation` at the
+  time of the reflash (`0483:5740` = STM32's standard CDC-ACM Virtual COM
+  Port ID) - so the board's USB CDC interface *did* start enumerating and
+  Windows correctly identified it, but driver installation never completed,
+  leaving a phantom (`CM_PROB_PHANTOM`) device node rather than a live COM
+  port. Likely cause: an ST-Link reflash only resets the MCU, it doesn't
+  force a real USB disconnect/reconnect, which Windows needs to retry driver
+  install cleanly.
+- Told the user to unplug/replug the USB cable, then check Device Manager's
+  Ports (COM & LPT) for a warning icon on the STM32 Virtual COM Port entry
+  and update the driver if present.
+- `CLAUDE.md` — added this as a gotcha, including the diagnostic commands
+  used, so a future hardware bring-up session doesn't have to rediscover it.
+- Messaged the firmware session with the finding (FYI, not a blocker) in
+  case it's actually a CDC ACM descriptor issue rather than a one-time
+  Windows driver prompt, since this is the first time their USB stack has
+  been tested against a real Windows host.
+
+### 26. Mirror firmware's ProtoMod EEPROM identity catalog; flag the AccelTemp dispute
+**2026-08-30, 14:14 CDT**
+
+**Prompt:** the user first reported (unprompted, mid-session) "board two is
+not IMU and Temp" - a real-hardware contradiction of this app's `AccelTemp`
+labeling for `0x0002`. Separately, the user shared
+`ProtoMod_Programmer/ProtoMod_Programmer.ino` (a third codebase - an Arduino
+wizard that programs each ProtoMod's onboard AT24C02 EEPROM with an 11-byte
+identity record: circuit code, PCB rev, PCBA rev, WW/YY date, 2 misc bytes).
+The firmware session then relayed that it had consolidated the same identity
+data firmware-side into `Core/{Inc,Src}/protomod_catalog.{h,c}` and asked
+this app to mirror it.
+
+**Purpose:** Firmware's new catalog is worth mirroring (matches this app's
+existing `ProtoModId` mirrors `protocol.h` pattern), but its `AccelTemp`
+entry (`circuit_code "F02"`) is *exactly* the assumption the user's "board
+two" report contradicts - the firmware session's message introducing the
+catalog didn't independently re-verify that entry, it just restated the same
+slot-position-based guess in a new file. Mirroring it faithfully without
+flagging that would have made a disputed, unconfirmed value look settled.
+
+**Changes:**
+- `Models/ProtoModBoardCatalog.cs` (new) — `ProtoModBoardIdentity` record +
+  the 3 entries firmware provided (BlinkyLed/F01, AccelTemp/F02,
+  ElectronicLoad/E05), doc-commented the same way `ProtoModId.cs` is
+  ("mirror `protomod_catalog.c`, update both sides together") **plus** a
+  prominent unresolved-dispute note on the class itself: don't treat
+  `AccelTemp="F02"` as settled, and the real fix is a non-destructive I2C
+  read of whatever's actually in that slot (ProtoCore's own EEPROM read) -
+  not the Arduino programmer sketch, which has no read-only mode (it always
+  ends in a write, and even its pre-write "planned payload" hexdump shows
+  the newly-typed values, not what's currently on the chip, so it can't
+  answer "what's there now" without risking overwriting it).
+- `ViewModels/HelpViewModel.cs` — `SupportedModuleInfo` gained a nullable
+  `CircuitCode`, joined from `ProtoModBoardCatalog.Entries` by `Id` (falls
+  back to `null`/displays `?` rather than throwing if a future type is in
+  `ModuleCatalog` but not yet cataloged). Added a matching `RevisionNotes`
+  line.
+- `Views/HelpPanel.xaml` — each supported-module row now shows its circuit
+  code (e.g. "Blinky LED — circuit code F01 (BlinkyLed)"), plus a short
+  explanatory footnote. Deliberately did *not* put the AccelTemp-specific
+  dispute into this end-user-facing UI text, since it's a transient,
+  soon-to-be-resolved engineering concern - that context lives in
+  `ProtoModBoardCatalog.cs`'s doc comment and here instead, where it won't
+  go stale in front of a user once resolved.
+- Verified live via UI Automation: rebuilt, launched, expanded the Help tab,
+  and confirmed all three rows render their correct circuit codes.
+- Replied to the firmware session: confirmed the mirror is in, but pushed
+  back on treating the catalog as resolving the AccelTemp question - asked
+  them to have ProtoCore do an actual non-destructive I2C read of the real
+  board in that slot and report the circuit code it actually finds, rather
+  than the PC and firmware sides just agreeing with each other's copy of
+  the same unverified assumption.
+
+### 27. Correct AccelTemp's circuit code to E03, confirmed against the actual product manuals
+**2026-08-30, 14:19 CDT**
+
+**Prompt:** none - the firmware session followed up unprompted, reporting it
+had settled the entry-26 dispute by finding and reading the project's own
+module manuals (`Documents/.../PROTOVERSE/Manuals/`), which neither session
+had pulled up before.
+
+**Purpose:** Apply the correction, but only after independently verifying it
+myself rather than trusting the relay - same standard as every other
+cross-session claim this project has acted on. The firmware session's quotes
+turned out to be accurate.
+
+**Changes:**
+- Independently extracted and read the actual text of both `.docx` files
+  (they're binary, not directly readable - unzipped as the OOXML archives
+  they are and pulled `word/document.xml`) rather than trusting the quoted
+  excerpts. Confirmed verbatim: `E03_Sensors1.docx` - "Module Name: Sensors
+  1 (E03) ... This ProtoMod introduces two types of sensors: STM LIS3DH
+  accelerometer ... Analog Devices TMP36 temperature sensor" - is
+  `AccelTemp`, precisely. `F02_Simple_LED.docx` - "Module Name: Simple LED
+  (F02) ... two LED paths (one red, one green) plus two switches per path"
+  - a resistor/voltage demo board, zero sensors, not `AccelTemp`.
+- `Models/ProtoModBoardCatalog.cs` — `AccelTemp`'s circuit code corrected
+  `"F02"` → `"E03"`. Rewrote the class doc comment from "unresolved
+  dispute" to "resolved (doc-confirmed), hardware-read still pending" -
+  kept the same honesty standard as the rest of this project: this is
+  documentation-confirmed, not yet verified against a live EEPROM read of
+  real Sensors-1 hardware.
+- `ViewModels/HelpViewModel.cs` — added a `RevisionNotes` line about the
+  correction, since users would have seen the wrong code before this.
+- `CLAUDE.md` — updated the wire protocol section's AccelTemp entry from
+  "open question, not resolved" to "resolved (documentation-confirmed),
+  hardware-read still pending," with the manual citations.
+- Verified live via UI Automation: rebuilt, launched, expanded the Help tab,
+  confirmed AccelTemp now shows circuit code `E03` (not `F02`) and the new
+  revision note appears.

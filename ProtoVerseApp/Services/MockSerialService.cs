@@ -96,7 +96,10 @@ namespace ProtoVerseApp.Services
         {
             if (frame.ModuleId == ProtoModId.Core && frame.Type == MsgType.PresenceRequest)
             {
-                var payload = InstalledMods.Select(m => (byte)m).ToArray();
+                // 2 bytes little-endian per ProtoModId, matching the widened wire format.
+                var payload = InstalledMods
+                    .SelectMany(m => new[] { (byte)((ushort)m & 0xFF), (byte)((ushort)m >> 8) })
+                    .ToArray();
                 return new ProtocolFrame(ProtoModId.Core, MsgType.PresenceReport, payload);
             }
 
