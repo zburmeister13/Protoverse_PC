@@ -2173,3 +2173,93 @@ entire contents. Screenshot capture returns a blank client area for this
 app's windows in this environment, and UIA can't enumerate its modal dialogs
 at all (both now recorded in `CLAUDE.md`). The dialog is confirmed to open at
 the right size, but nobody has actually looked at it.
+
+---
+
+### 47. Evaluation spike: in-app ProtoMod manuals, demoed on Electronic Load (E05)
+
+**2026-08-31, 19:10 CDT**
+
+**Prompt:** an evaluation brief (`in-app-manuals-eval-prompt.md`) asking for a
+spike - not a production feature - rendering ProtoMod manuals natively inside
+the app instead of a separate Word/PDF window, built for one module, on a
+throwaway branch, with a written recommendation and effort estimate. Followed
+by three decisions from the user when asked: (1) the left column should show
+the three slots with a presence dot, and selecting one opens that module for
+learning/work - accepting for now that this doesn't model two ProtoMods
+working together; (2) demo on the Electronic Load rather than Blinky; (3)
+placeholders are fine, the focus is UI not appearance. Plus one architectural
+note: learner status/progress should eventually be retained per user.
+
+**Purpose:** Find out whether native in-app manuals are worth building across
+the whole library, and what it would actually cost - rather than committing to
+it.
+
+**Three things the brief assumed that turned out not to hold**, all confirmed
+before any code was written:
+- It assumed manuals are reachable in-app today and asked which entry point to
+  replace. There is none - the app has never linked to a manual. The `.docx`
+  files aren't even in this repo.
+- It named Blinky F01 as the demo module, partly to evaluate the fillable
+  value table. F01 has no adjustable values and no such table anywhere in its
+  manual. E05 - the module the user independently chose - is the one board
+  with a dial to turn and a number to read back, so it genuinely exercises
+  that pattern.
+- It asked whether placeholder content would need drafting. For F01 it
+  wouldn't have: `Manuals/Gen2/Blinky_F01_Manual.docx` is already written
+  against the exact template the brief cites. For E05, nothing exists at all.
+
+**Changes** (branch `eval/in-app-manuals-e05`, three commits):
+- `Models/Manual/ManualBlocks.cs` - content model mapping 1:1 to the manual
+  template. Callouts, figures, checklists, step lists with inline Observe
+  prompts, fillable value tables and question lists are first-class block
+  types, not styled paragraphs, because they're the patterns that repeat.
+- `Models/Manual/ManualBoilerplate.cs` - assembly steps and the "no single
+  correct answer" reassurance, shared rather than repeated per manual.
+- `Models/Manual/ElectronicLoadManual.cs` - E05's content. Real material from
+  this repo's own docs where it exists (the calibration, the open-loop
+  constraint, the 300mA limit), explicit placeholders everywhere it doesn't.
+  Six of twelve sections are placeholders, which the UI states plainly.
+- `Models/Manual/ManualProgress.cs` - the shape for retaining learner work.
+  Designed, deliberately not yet persisted.
+- `ViewModels/ManualViewModel.cs`, `Views/ManualView.xaml` - the renderer: one
+  set of DataTemplates keyed by block type.
+- `ViewModels/SlotViewModel.cs`, `MainViewModel`, `MainWindow.xaml` - the
+  navigator/workspace layout. `Panels` became `Slots`; panel view models are
+  wrapped, not changed.
+- `EVALUATION.md` - the deliverable.
+
+**Recommendation, in short: proceed, with two changes to the plan.** Build a
+`.docx` -> JSON converter *before* transcribing any more manuals (~1 day, pays
+for itself around manual #5, and avoids drift from the Word source that is and
+will remain the authoring surface), and pull learner-progress persistence into
+v1 rather than leaving it as a v2 stretch. The second is because this demo
+already has the defect that argues for it: `SlotViewModel` rebuilds its
+`ManualViewModel` on every `PresenceReport`, so hot-swapping a module silently
+discards anything typed into the value table. An unsaved fillable field is
+worse than paper. Persistence is roughly half a day, because
+`Services/AccountStore` already stores per-account per-module records.
+
+**Two honest findings that cut against the feature:**
+- **A partially-transcribed manual is worse than no in-app manual.** The
+  learner finds half the sections missing, opens Word anyway, and now has two
+  sources that can disagree. The E05 demo shows exactly this state on purpose.
+- **Print-to-PDF genuinely goes away**, and for a classroom product that may
+  matter more than anything the in-app version adds - the fillable table is
+  precisely the thing a facilitator would want to hand out on paper. Text
+  scaling for low-vision users is a second real regression: font sizes here
+  are fixed px.
+
+**Verification.** Driven through UI Automation in Simulator mode: navigator
+shows three slots with correct presence dots and "Manual available" only on
+E05; the manual renders its header, metadata row, provenance banner and all 11
+TOC entries; 3 Tech notes, 4 Observe prompts, 2 figure placeholders and 5 of 6
+placeholder callouts render (the sixth is inside the gated answer key,
+correctly hidden until revealed); 14 checkboxes and 22 text fields present;
+typing into a table cell and ticking a step both work; "Reveal answers"
+removes the gate and shows Appendix A; a TOC click scrolls the target section
+from y=658 to y=126; a slot with no manual shows the explanatory placeholder.
+
+**Not verified: appearance** - same blank-capture limitation as entries 43-46.
+The layout is verified structurally and behaviourally; nobody has looked at
+it. Whether the manual is genuinely readable at this width is unassessed.
