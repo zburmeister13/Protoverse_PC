@@ -1653,3 +1653,44 @@ frame means instead of requiring hand-decoding hex against the wire spec.
   decoded Info text for `PresenceRequest`, `PresenceReport`, `StreamData`
   (AccelTemp), `Command`/`Response` (BlinkyLed and ElectronicLoad) all
   matched the actual values shown in each panel's own UI.
+
+### 41. Rewrote README.md against current reality, added real GUI screenshots
+**2026-08-31, 00:17 CDT**
+
+**Prompt:** "update git and specifically update the readme - feel free to
+use actual images from the GUI."
+
+**Purpose:** `README.md` still read like the original scaffold handoff
+document from before the app was ever built or run - "This was written as
+source, not built/tested here," a `PresenceReport` description that
+predated the fixed-array format fix, only 3 of the now-5 cataloged
+`ProtoModId`s, no mention of Simulator mode, the Traffic Log's new decode,
+or the theme - and had no images at all. Brought it in line with what the
+app actually is today, for a human landing on the repo cold.
+
+**Changes:**
+- `docs/screenshots/main-window.png` and `docs/screenshots/traffic-log.png`
+  (new) - real screenshots, not mockups, captured from the app's live
+  session actually connected to real ProtoCore hardware over COM4 (an
+  Electronic Load and a Blinky LED installed) rather than Simulator mode,
+  since that session happened to be open and idle at the time - full-screen
+  capture-and-crop per the established tooling note, then cropped further
+  in-memory to isolate the module-panels region and the Traffic Log region
+  as two separate images. Did not touch the live session's Connect/
+  Disconnect state or any control, since it was an active hardware session,
+  not this session's own test instance.
+- `README.md` - full rewrite: leads with the main-window screenshot and a
+  plain "what it does" section aimed at someone landing on the repo cold,
+  a module-support-status table (Blinky LED done, Electronic Load done,
+  AccelTemp UI-done-payload-placeholder, everything else shown as
+  "Unsupported" rather than hidden), real build/run instructions (`dotnet
+  build`/`dotnet run`, replacing the old "open in Visual Studio, wasn't
+  actually built here yet" scaffold-era instructions), the Traffic Log
+  screenshot alongside an explanation of what it actually diagnosed in
+  practice, and an updated wire-protocol section (all 5 current
+  `ProtoModId`s including `BasicLed`/`Unknown`, the corrected fixed-array
+  `PresenceReport` format and why it's fixed-size, and the confirmed 5-value
+  error code table). Kept the architecture diagram and "adding a new
+  ProtoMod" walkthrough from the original, since both were still accurate.
+  Points to `CLAUDE.md`/`CHANGELOG.md` for anything more detailed rather
+  than duplicating their content.
