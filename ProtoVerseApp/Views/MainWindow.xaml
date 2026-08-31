@@ -48,8 +48,15 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Brand header: orbit mark + wordmark + tagline -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,18">
+        <!-- Brand header: orbit mark + wordmark + tagline, with the sign-in control
+             pinned to the right. -->
+        <Grid Grid.Row="0" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Orientation="Horizontal">
             <Viewbox Width="40" Height="40" Margin="0,0,12,0">
                 <Canvas Width="44" Height="44">
                     <Ellipse Canvas.Left="2" Canvas.Top="12" Width="40" Height="20"
@@ -74,6 +81,31 @@
             </StackPanel>
         </StackPanel>
 
+            <!-- Sign-in control. Profiles keep two people's kit tracking apart on a
+                 shared PC; they are deliberately not a security feature (no password),
+                 which is why this is a name and a button rather than a login form. -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel VerticalAlignment="Center" Margin="0,0,10,0" HorizontalAlignment="Right">
+                    <TextBlock Text="{Binding Account.DisplayName}" FontSize="12" FontWeight="SemiBold"
+                               HorizontalAlignment="Right"
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                    <TextBlock Text="{Binding Account.StatusLine}" FontSize="10"
+                               HorizontalAlignment="Right"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                </StackPanel>
+                <Button Content="Sign in" Command="{Binding Account.SignInCommand}" MinWidth="70"
+                        Visibility="{Binding Account.IsSignedIn, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                <Button Content="Switch" Command="{Binding Account.SignInCommand}" MinWidth="64" Margin="0,0,6,0"
+                        FontSize="11"
+                        Background="{StaticResource SurfaceAltBrush}"
+                        Foreground="{StaticResource TextPrimaryBrush}"
+                        Visibility="{Binding Account.IsSignedIn, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <Button Content="Sign out" Command="{Binding Account.SignOutCommand}" MinWidth="70"
+                        FontSize="11"
+                        Visibility="{Binding Account.IsSignedIn, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            </StackPanel>
+        </Grid>
+
         <!-- Connection bar -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
             <CheckBox Content="Simulator mode" IsChecked="{Binding SimulatorMode}"
@@ -92,9 +124,23 @@
         <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Margin="0,0,0,8"
                     Foreground="{StaticResource TextSecondaryBrush}"/>
 
+        <!--
+            Main content area, as two top-level tabs:
+              Slots   - the live ProtoMod panels for whatever's plugged in right now
+                        (unchanged; just moved inside a TabItem)
+              Library - the full ProtoMod catalog, owned or not. A discovery surface,
+                        so it gets the same real estate as the live slots rather than
+                        being squeezed into the collapsed bottom drawer with Traffic
+                        Log/Help.
+            Uses MainTabControlStyle (not the implicit TabControl style) because this
+            one sits in a bounded Height="*" row and its content must scroll inside
+            that row - see the comment on that style in App.xaml.
+        -->
+        <TabControl Grid.Row="3" Style="{StaticResource MainTabControlStyle}">
+        <TabItem Header="Slots">
         <!-- Stacked ProtoMod panels. Scrollable now that telemetry panels can hold
              charts tall enough to exceed the window (see AccelTemp/ElectronicLoad). -->
-        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding Panels}">
                 <ItemsControl.ItemsPanel>
@@ -121,6 +167,11 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
+        </TabItem>
+            <TabItem Header="Library">
+                <views:LibraryPanel DataContext="{Binding Library}"/>
+            </TabItem>
+        </TabControl>
 
         <!-- Collapsible bottom area: raw traffic log (every frame sent/received, hex +
              decoded) and Help (revision notes + currently supported ProtoMods), as

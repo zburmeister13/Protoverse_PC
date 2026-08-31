@@ -35,6 +35,22 @@ namespace ProtoVerseApp.ViewModels
         public TrafficLogViewModel TrafficLog { get; }
         public HelpViewModel Help { get; } = new();
 
+        /// <summary>Local profiles, so two people sharing a PC track separate kits.
+        /// Not a security boundary - see <see cref="AccountStore"/>. Shared between the
+        /// header's sign-in control and the Library, so both see the same active
+        /// account.</summary>
+        private readonly AccountStore _accounts = new();
+
+        /// <summary>Backs the sign-in control in the window's top-right corner.</summary>
+        public AccountViewModel Account { get; }
+
+        /// <summary>The Library tab's full ProtoMod catalog - everything that exists,
+        /// not just what's plugged in. Read-only content; this class's only interaction
+        /// with it is telling it which module types the slots currently hold, so the
+        /// user's kit can be tracked against what's actually detected. Assigned in the
+        /// constructor before ResetSlotsToEmpty() (which clears its live marks) runs.</summary>
+        public LibraryViewModel Library { get; }
+
         [ObservableProperty]
         private string? _selectedPort;
 
@@ -53,6 +69,9 @@ namespace ProtoVerseApp.ViewModels
 
         public MainViewModel()
         {
+            Account = new AccountViewModel(_accounts);
+            Library = new LibraryViewModel(_accounts);
+
             _serial = new SerialService();
             _dispatcher = new FrameDispatcher(_serial);
             _dispatcher.FrameReceived += OnFrameReceived;
@@ -200,6 +219,7 @@ namespace ProtoVerseApp.ViewModels
             //     losing the whole report - the other slots still update normally.
             var newPanels = new List<object>(SlotCount);
             var slotErrors = new List<string>();
+            var detectedIds = new List<ProtoModId>();
             int detectedCount = 0;
 
             for (int slot = 0; slot < SlotCount; slot++)
@@ -212,6 +232,13 @@ namespace ProtoVerseApp.ViewModels
                 }
 
                 detectedCount++;
+                // Every non-empty slot counts as "in your kit" for the Library tab,
+                // including a type this build has no panel for (F02/BasicLed today) -
+                // owning a board and this app being able to control it are different
+                // things, and the Library is about the former. ProtoModId.Unknown ends
+                // up in here too, harmlessly: no catalog entry claims that ID, so it
+                // matches nothing.
+                detectedIds.Add(moduleId);
                 try
                 {
                     newPanels.Add(ModuleCatalog.TryCreate(moduleId, _dispatcher) ?? (object)new UnknownModuleViewModel(moduleId));
@@ -227,6 +254,8 @@ namespace ProtoVerseApp.ViewModels
             Panels.Clear();
             foreach (var panel in newPanels)
                 Panels.Add(panel);
+
+            Library.UpdateInstalled(detectedIds);
 
             StatusMessage = slotErrors.Count == 0
                 ? $"{detectedCount} ProtoMod(s) detected"
@@ -254,6 +283,12 @@ namespace ProtoVerseApp.ViewModels
             Panels.Clear();
             for (int i = 0; i < SlotCount; i++)
                 Panels.Add(new EmptySlotViewModel());
+
+            // Disconnected means the app no longer knows what's installed - which is a
+            // different claim from "nothing is installed", so the Library drops back to
+            // "connect to see which of these are in your kit" rather than marking every
+            // module not-owned.
+            Library.ClearInstalled();
         }
     }
 }

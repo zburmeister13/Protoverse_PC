@@ -26,6 +26,10 @@ namespace ProtoVerseApp.ViewModels
         /// they see or can do does.</summary>
         public IReadOnlyList<string> RevisionNotes { get; } = new[]
         {
+            "Added profiles (top right) so each person tracks their own kit, and the Library now asks whether a ProtoMod you plugged in is yours - answerable either way, and changeable later.",
+            "The Library now remembers ProtoMods you've connected before, so they stay listed after you unplug them.",
+            "The Library can now be filtered to one ProtoMod family: Fundamentals, Explorers, or Advanced.",
+            "Added a Library tab showing the whole ProtoMod catalog - what's in your kit, and what you could add next.",
             "Added a real ProtoVerse app icon (taskbar, title bar, Alt-Tab) instead of the generic default.",
             "Corrected the Accel+Temp ProtoMod's expected circuit code from F02 to E03, per the module's product manual.",
             "Supported ProtoMods now show their expected EEPROM circuit code alongside their name.",

@@ -1,0 +1,352 @@
+<UserControl x:Class="ProtoVerseApp.Views.LibraryPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ProtoVerseApp.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/mc"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:LibraryViewModel}">
+
+    <!--
+        The Library is a discovery surface, not an inventory screen: every ProtoMod in
+        the catalog is shown at full strength whether or not it's plugged in. Modules
+        the user doesn't own yet get an inviting blue "Not yet in your kit" badge and
+        an accent stripe - never dimming, never a lock icon, never hidden.
+
+        Read-only by construction: nothing in this file sends a frame or touches a
+        module's control logic. The only interaction is selecting a card, which the
+        code-behind scrolls into view.
+    -->
+    <UserControl.Resources>
+
+        <!-- One "leads into" link. Only ever rendered where the catalog has a real
+             evidence sentence for the progression; that sentence is the tooltip. -->
+        <DataTemplate x:Key="NextStepTemplate" DataType="{x:Type vm:NextStepLinkViewModel}">
+            <Button Command="{Binding FollowCommand}"
+                    Content="{Binding Label}"
+                    ToolTip="{Binding Evidence}"
+                    Margin="0,0,6,0" Padding="10,4" FontSize="11"
+                    Background="{StaticResource AccentBlueBrush}"/>
+        </DataTemplate>
+
+        <!-- One project prompt. The source label is shown, not hidden, because these
+             are quoted from a real manual rather than generated - the provenance is
+             part of what makes them trustworthy. -->
+        <DataTemplate x:Key="IdeaTemplate">
+            <StackPanel Margin="0,0,0,7">
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12">
+                    <Run Text="•  " Foreground="{StaticResource AccentGreenBrush}"/><Run Text="{Binding Text, Mode=OneWay}"/>
+                </TextBlock>
+                <TextBlock Text="{Binding Source, Mode=OneWay}" Margin="14,1,0,0"
+                           FontSize="10" FontStyle="Italic" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- One catalog card. -->
+        <DataTemplate x:Key="LibraryCardTemplate" DataType="{x:Type vm:LibraryEntryViewModel}">
+            <!-- 385 + 12 margin = 397 per card, so two columns fit the ~834px the list
+                 gets at MainWindow's default 900px width (measured, not guessed - at
+                 410 the pair overflowed by ~10px and every card wrapped to its own
+                 row). Wider windows still only fit two; that's fine, the cards are
+                 text-dense and a third column would make lines uncomfortably short. -->
+            <Border x:Name="card" Width="385" Margin="0,0,12,12" CornerRadius="8"
+                    Background="{StaticResource SurfaceAltBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="4"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Ownership stripe: green = in your kit, blue = available to add.
+                         Both are full-strength accents; "not owned" is an invitation
+                         here, not a disabled state. -->
+                    <Border x:Name="stripe" Grid.Column="0" CornerRadius="8,0,0,8"
+                            Background="{StaticResource AccentBlueBrush}"/>
+
+                    <StackPanel Grid.Column="1" Margin="14,12,14,12">
+
+                        <!-- Header: name + code, series/difficulty line, kit badge -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <TextBlock Text="{Binding SeriesLabel}" FontSize="11"
+                                               Foreground="{StaticResource AccentTealBrush}"/>
+                                    <TextBlock Text="  ·  " FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding DifficultyLabel}" FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="  ·  " FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Visibility="{Binding HasTimeEstimate, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <TextBlock Text="{Binding TimeEstimate}" FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Visibility="{Binding HasTimeEstimate, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border x:Name="badge" Grid.Column="1" VerticalAlignment="Top"
+                                    CornerRadius="10" Padding="9,3" Margin="8,0,0,0"
+                                    Background="{StaticResource AccentBlueBrush}">
+                                <TextBlock Text="{Binding StatusLabel}" FontSize="10" FontWeight="SemiBold"
+                                           Foreground="{StaticResource BgBrush}"/>
+                            </Border>
+                        </Grid>
+
+                        <!-- Kit question. Appears only once the app has actually seen
+                             this board and the signed-in user hasn't answered - asking
+                             about a module nobody has plugged in would be noise on
+                             every card. Answering is what separates "we saw this" from
+                             "this is mine", and it's always reversible below. -->
+                        <Border Margin="0,10,0,0" Padding="10,8" CornerRadius="5"
+                                Background="{StaticResource BgBrush}"
+                                BorderBrush="{StaticResource AccentTealBrush}" BorderThickness="1"
+                                Visibility="{Binding ShowKitPrompt, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel>
+                                <TextBlock Text="Is this ProtoMod part of your kit?" FontSize="11" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="We saw it plugged in, but that doesn't tell us whether it's yours or borrowed."
+                                           FontSize="10" TextWrapping="Wrap" Margin="0,2,0,6"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Yes, it's mine" Command="{Binding ClaimKitCommand}"
+                                            FontSize="11" Padding="10,4" Margin="0,0,6,0"/>
+                                    <Button Content="No, just borrowed" Command="{Binding DisclaimKitCommand}"
+                                            FontSize="11" Padding="10,4"
+                                            Background="{StaticResource SurfaceAltBrush}"
+                                            Foreground="{StaticResource TextPrimaryBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Description (or its explicit placeholder) -->
+                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,10,0,0"
+                                   FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Text="{Binding DescriptionSource}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                   FontSize="10" FontStyle="Italic"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Visibility="{Binding HasDescription, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <!-- Schematic: placeholder tile (no drawing is bundled with the
+                             app yet for any board) plus the brief text description of
+                             the real circuit, where a manual or this repo's docs
+                             provide one. -->
+                        <TextBlock Text="THE CIRCUIT" FontSize="10" FontWeight="Bold" Margin="0,14,0,5"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="76" Height="58" CornerRadius="5"
+                                    VerticalAlignment="Top" Margin="0,0,10,0"
+                                    Background="{StaticResource BgBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                    ToolTip="{Binding SchematicDrawingLabel}">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Code}" FontFamily="Consolas" FontSize="16"
+                                               FontWeight="Bold" HorizontalAlignment="Center"
+                                               Foreground="{StaticResource AccentTealBrush}"/>
+                                    <TextBlock Text="drawing" FontSize="9" HorizontalAlignment="Center"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <TextBlock Text="coming soon" FontSize="9" HorizontalAlignment="Center"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding SchematicSummary}" TextWrapping="Wrap" FontSize="12"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="{Binding SchematicSummarySource}" TextWrapping="Wrap"
+                                           Margin="0,2,0,0" FontSize="10" FontStyle="Italic"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Visibility="{Binding HasSchematicSummary, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Ideas -->
+                        <TextBlock Text="TRY THIS" FontSize="10" FontWeight="Bold" Margin="0,14,0,5"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <ItemsControl ItemsSource="{Binding Ideas}" ItemTemplate="{StaticResource IdeaTemplate}"
+                                      Visibility="{Binding HasIdeas, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <TextBlock Text="Project ideas for this ProtoMod are coming soon - its manual hasn't been written yet."
+                                   TextWrapping="Wrap" FontSize="11" FontStyle="Italic"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Visibility="{Binding HasIdeas, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+
+                        <!-- Next steps -->
+                        <TextBlock Text="LEADS INTO" FontSize="10" FontWeight="Bold" Margin="0,14,0,5"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Visibility="{Binding HasNextSteps, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <ItemsControl ItemsSource="{Binding NextSteps}" ItemTemplate="{StaticResource NextStepTemplate}"
+                                      Visibility="{Binding HasNextSteps, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+
+                        <!-- The undo for the question above. A board plugged in once
+                             must never be stuck in someone's kit permanently, so a
+                             given answer is always one click from being flipped. -->
+                        <Button Content="{Binding ChangeKitAnswerLabel}" Command="{Binding ToggleKitCommand}"
+                                HorizontalAlignment="Left" Margin="0,10,0,0"
+                                FontSize="10" Padding="8,3"
+                                Background="{StaticResource SurfaceBrush}"
+                                Foreground="{StaticResource TextSecondaryBrush}"
+                                Visibility="{Binding ShowChangeKitAnswer, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <!-- Footer: what's still missing, stated plainly -->
+                        <TextBlock Text="{Binding ManualReference}" TextWrapping="Wrap" Margin="0,14,0,0"
+                                   FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"
+                                   Visibility="{Binding HasManual, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <TextBlock Text="Full module manual coming soon." Margin="0,14,0,0"
+                                   FontSize="10" FontStyle="Italic"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Visibility="{Binding HasManual, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                        <TextBlock Text="ProtoCore can't identify this board yet, so the app can't tell whether it's plugged in."
+                                   TextWrapping="Wrap" Margin="0,3,0,0"
+                                   FontSize="10" FontStyle="Italic"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Visibility="{Binding IsDetectable, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <DataTemplate.Triggers>
+                <!-- Accent colors, in increasing precedence (later triggers win):
+                       blue (default above) = not yet connected / not in kit
+                       teal                 = previously connected, or confirmed in kit
+                       green                = plugged in right this second
+                     Everything else about the card is identical in all states - a
+                     module the user doesn't have never reads as second-class or
+                     locked. -->
+                <DataTrigger Binding="{Binding IsPreviouslyConnected}" Value="True">
+                    <Setter TargetName="stripe" Property="Background" Value="{StaticResource AccentTealBrush}"/>
+                    <Setter TargetName="badge" Property="Background" Value="{StaticResource AccentTealBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsInKit}" Value="True">
+                    <Setter TargetName="stripe" Property="Background" Value="{StaticResource AccentTealBrush}"/>
+                    <Setter TargetName="badge" Property="Background" Value="{StaticResource AccentTealBrush}"/>
+                </DataTrigger>
+                <!-- Last, so a board the user disowned still shows blue even though it
+                     has been connected before. -->
+                <DataTrigger Binding="{Binding IsNotMine}" Value="True">
+                    <Setter TargetName="stripe" Property="Background" Value="{StaticResource AccentBlueBrush}"/>
+                    <Setter TargetName="badge" Property="Background" Value="{StaticResource AccentBlueBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsConnectedNow}" Value="True">
+                    <Setter TargetName="stripe" Property="Background" Value="{StaticResource AccentGreenBrush}"/>
+                    <Setter TargetName="badge" Property="Background" Value="{StaticResource AccentGreenBrush}"/>
+                </DataTrigger>
+                <!-- Selected (clicked directly, or arrived at via a "leads into" link
+                     on another card): orange highlight ring. -->
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="card" Property="BorderBrush" Value="{StaticResource AccentOrangeBrush}"/>
+                    <Setter TargetName="card" Property="BorderThickness" Value="2"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- One family filter button (All / Fundamentals / Explorers / Advanced).
+             Unselected reads as a quiet chip; selected fills with teal, matching the
+             app's primary-button treatment. -->
+        <DataTemplate x:Key="SeriesFilterTemplate" DataType="{x:Type vm:SeriesFilterViewModel}">
+            <Button Command="{Binding ApplyCommand}" Content="{Binding Label}">
+                <Button.Style>
+                    <!-- Unselected/selected colors are Style setters, not local
+                         attributes on the Button: a locally-set Background outranks a
+                         Style trigger in WPF's value precedence, so setting it inline
+                         would silently defeat the IsSelected trigger below. -->
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Setter Property="Margin" Value="0,0,6,0"/>
+                        <Setter Property="Padding" Value="12,5"/>
+                        <Setter Property="FontSize" Value="11"/>
+                        <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+                        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource AccentTealBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource BgBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </DataTemplate>
+
+        <!-- Strips the default ListBoxItem selection chrome: selection here is
+             expressed by the card's own highlight ring (above), not a blue fill. -->
+        <Style x:Key="LibraryCardContainerStyle" TargetType="ListBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Margin="4,2,4,10">
+            <TextBlock Text="ProtoMod Library" FontSize="16" FontWeight="Bold"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+            <!-- Wording is about what's been connected, not what's owned: plugging in a
+                 borrowed board once marks it here forever and there's no un-see, so
+                 this must not read as a claim about what the user has bought. -->
+            <TextBlock Text="Every ProtoMod in the catalog - the ones you've connected, and the ones waiting for you."
+                       FontSize="11" Margin="0,2,0,0"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+            <TextBlock Text="{Binding KitSummary}" FontSize="11" Margin="0,4,0,0"
+                       Foreground="{StaticResource AccentTealBrush}"/>
+
+            <!-- Family filter. Three families exist (F/E/A - see ProtoModSeries), so a
+                 flat row of buttons beats a dropdown: every option is visible at once
+                 and one click away, and the counts show how the catalog splits. -->
+            <ItemsControl ItemsSource="{Binding SeriesFilters}" ItemTemplate="{StaticResource SeriesFilterTemplate}"
+                          Margin="0,10,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </StackPanel>
+
+        <ListBox x:Name="CardList"
+                 ItemsSource="{Binding EntriesView}"
+                 SelectedItem="{Binding SelectedEntry}"
+                 ItemTemplate="{StaticResource LibraryCardTemplate}"
+                 ItemContainerStyle="{StaticResource LibraryCardContainerStyle}"
+                 SelectionChanged="OnCardSelectionChanged"
+                 Background="Transparent" BorderThickness="0"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 HorizontalContentAlignment="Left">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <!-- Reflows to one or two columns depending on window width. Card
+                         heights vary a lot (an entry with three quoted ideas is much
+                         taller than one waiting on its manual), so WrapPanel's ragged
+                         bottom edge is expected. Virtualization is off with a
+                         WrapPanel; fine at catalog sizes this app will realistically
+                         render in one view. -->
+                    <WrapPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+        </ListBox>
+    </DockPanel>
+</UserControl>
