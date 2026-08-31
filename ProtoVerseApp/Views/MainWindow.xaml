@@ -140,9 +140,27 @@
                                 <DataGridTextColumn Header="Dir" Binding="{Binding DirectionLabel}" Width="40"/>
                                 <DataGridTextColumn Header="Module" Binding="{Binding Module}" Width="90"/>
                                 <DataGridTextColumn Header="MsgType" Binding="{Binding MsgType}" Width="100"/>
+                                <!-- Length and Checksum: the two Raw Frame "blocks" not already
+                                     broken out into Module/MsgType/Payload above. STX and ETX
+                                     (the other two framing bytes) are constant 0x02/0x03 markers,
+                                     explained in the Raw Frame header's tooltip below rather than
+                                     given their own always-identical column. -->
+                                <DataGridTextColumn Header="Length" Binding="{Binding LengthLabel}" Width="55"/>
                                 <DataGridTextColumn Header="Payload" Binding="{Binding PayloadHex}" Width="150"/>
-                                <DataGridTextColumn Header="Raw Frame" Binding="{Binding RawHex}" Width="*"/>
-                                <DataGridTextColumn Header="Info" Binding="{Binding Info}" Width="150"/>
+                                <DataGridTextColumn Header="Checksum" Binding="{Binding ChecksumHex}" Width="70"/>
+                                <DataGridTextColumn Header="Raw Frame" Binding="{Binding RawHex}" Width="220">
+                                    <DataGridTextColumn.HeaderStyle>
+                                        <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                                            <Setter Property="ToolTip">
+                                                <Setter.Value>
+                                                    <TextBlock TextWrapping="Wrap" MaxWidth="320"
+                                                               Text="Full wire frame, byte-for-byte: STX (0x02) · ProtoModId lo · ProtoModId hi · MsgType · Length · Payload… · Checksum · ETX (0x03). Module/MsgType/Length/Payload/Checksum are already broken out in the columns to the left - this is the exact bytes ProtoCore actually sent or received."/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </DataGridTextColumn.HeaderStyle>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Header="Info" Binding="{Binding Info}" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </DockPanel>

@@ -1578,3 +1578,78 @@ either side; no app code needed to change for either update.
   multiples of 10 (was 2) since the frequency bump traded duty-step
   resolution for a fixed ISR rate. Not a bug if a future duty readout
   looks coarser than the calibration formula alone would suggest.
+
+### 40. Near-black theme; Traffic Log's Info column decoded, Length/Checksum columns added
+**2026-08-30, 23:45 CDT**
+
+**Prompt:** "I'm sick of the purple - can you do a dark mode - mostly black
+background with accents driven off of the logo/business scheme? also add
+in the following - populate the info tab in the help tab - indicate the
+meaning of the blocks using additional columns if necessary." Clarified via
+`AskUserQuestion` that "the info tab" actually meant the Traffic Log's
+existing, never-populated Info column (not a new tab), and "the blocks"
+meant the Raw Frame column's hex byte groups - not to be removed, just made
+readable alongside.
+
+**Purpose:** Replace the original deep-navy/purple background with a
+genuinely dark, near-black theme while keeping the brand accent colors
+recognizable, and make the Traffic Log actually explain what a captured
+frame means instead of requiring hand-decoding hex against the wire spec.
+
+**Changes:**
+- `App.xaml` - swapped `BgColor`/`SurfaceColor`/`SurfaceAltColor`/
+  `BorderColor` from the deep-navy/purple ramp (`#1B1642`→`#3D3475`) to a
+  near-black neutral-gray ramp (`#0A0A0C`→`#35353C`), and
+  `TextSecondaryColor` from a lavender tint (`#A79FD1`) to a neutral gray
+  (`#9A9AA4`). Left `AccentTeal`/`AccentGreen`/`AccentBlue`/`AccentOrange`
+  and `TextPrimaryColor` unchanged - those are the actual logo-derived
+  colors and read cleanly against either background. Updated the same
+  three hand-synced literal-color spots CLAUDE.md already flags as unable
+  to bind to a `StaticResource`: `Converters/BoolToBrushConverter.cs`'s
+  off-state gray, and `Charts/ChartTheme.cs`'s `Background`/`GridLines`/
+  `TextMuted`. `Converters/SlotStateToBrushConverter.cs` needed no change -
+  it only ever uses the unchanged green/orange accents.
+- `Models/FrameInterpreter.cs` (new) - a pure decode function,
+  `Describe(ProtocolFrame)`, that turns a frame's `MsgType`/`ModuleId`/
+  payload into a short human-readable summary (`"SetCurrentLimitMa: 100
+  mA"`, `"Commanded: 100 mA, Duty: 30%"`, `"Temp=23°C, X=0.91g, Y=-0.42g,
+  Z=-0.98g"`, `"Slot 0: BlinkyLed, Slot 1: AccelTemp, Slot 2:
+  ElectronicLoad"`, `"Error: PROTOCOL_ERR_NOT_IMPLEMENTED (0x04)"`, etc.),
+  mirroring the payload layouts already implemented separately in each
+  panel's own parsing code. Guards every case with an explicit payload-
+  length check (falls back to a generic description rather than indexing
+  past a too-short payload) since the frame reader only guarantees a
+  checksum-valid frame, not one shaped the way this app expects - a real
+  concern given this session's own firmware bugs that produced exactly
+  that. Asked the firmware session for the authoritative `protocol_err_t`
+  values rather than guessing at the three not yet documented on this
+  side; got back the complete set (`protocol.h`, 0x01-0x05, no gaps):
+  `PROTOCOL_ERR_NOT_PRESENT`, `_UNKNOWN_MSGTYPE`, `_BAD_PAYLOAD_LEN`,
+  `_NOT_IMPLEMENTED`, `_BAD_VALUE`. Any error code outside that set falls
+  back to a generic "unrecognized code 0xNN" rather than risk mislabeling
+  a future addition.
+- `Models/TrafficLogEntry.cs` - `Info` is now populated via
+  `FrameInterpreter.Describe` for every sent/received frame (previously
+  only ever set for local framing/checksum errors, so it showed "-" for
+  literally every normal frame). Added `LengthLabel` and `ChecksumHex`
+  properties, extracted from the frame's own `Encode()` output rather than
+  recomputed by hand.
+- `Views/MainWindow.xaml` - added "Length" and "Checksum" DataGrid columns
+  to the Traffic Log (the two Raw Frame "blocks" not already broken out
+  into the existing Module/MsgType/Payload columns) and widened Info to
+  fill the remaining space. Left STX/ETX (the other two framing bytes)
+  without their own columns, since they're constant `0x02`/`0x03` markers
+  with no per-frame information - instead added a tooltip on the "Raw
+  Frame" column header spelling out the complete byte layout for anyone
+  who hovers. The raw hex itself is untouched and still fully visible,
+  per the user's explicit "do not remove the raw data" instruction.
+- Verified live in Simulator mode via UI Automation and a full-screen
+  capture-and-crop screenshot (this session runs on a second monitor with
+  a non-zero virtual-screen origin - the crop script needed a fix to
+  capture the full virtual desktop and offset by its origin, not just
+  `PrimaryScreen.Bounds`, or the earlier single-monitor-only version
+  produced a blank sliver): confirmed the new near-black theme renders
+  correctly across every panel and the Traffic Log, and confirmed real
+  decoded Info text for `PresenceRequest`, `PresenceReport`, `StreamData`
+  (AccelTemp), `Command`/`Response` (BlinkyLed and ElectronicLoad) all
+  matched the actual values shown in each panel's own UI.

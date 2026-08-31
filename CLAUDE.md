@@ -282,17 +282,28 @@ needed to work on this app — this file has what's actually relevant here.
   of throwing and caught at the point closest to the failure, converted into
   a status message or graceful UI state — the global dialog is for bugs,
   not expected failure modes.
-- **Branded dark theme.** `App.xaml` defines the ProtoVerse brand palette
-  (deep navy background, teal/green/blue/orange accents, off-white/lavender
-  text — sampled from the logo lockup) as named `Color`/`SolidColorBrush`
+- **Branded dark theme, near-black as of 2026-08-30.** `App.xaml` defines
+  the ProtoVerse brand palette as named `Color`/`SolidColorBrush`
   resources, plus implicit (`TargetType`-only) `Style`s for `Button`,
   `TextBox`, `CheckBox`, `ComboBox`, `Expander`, and `DataGrid` so every
-  control picks the theme up automatically. New views should reference these
-  `StaticResource` brushes rather than hardcoding colors; the two status-dot
-  converters (`BoolToBrushConverter`, `SlotStateToBrushConverter`) are the one
-  exception — a converter can't bind to a `StaticResource`, so their brush
-  hex values are literal and must be kept in sync by hand if the palette in
-  `App.xaml` ever changes.
+  control picks the theme up automatically. The background/surface ramp
+  was originally a deep-navy/purple sampled from the logo lockup, and was
+  swapped to a near-black neutral-gray ramp (`BgColor` `#0A0A0C` up through
+  `BorderColor` `#35353C`, `TextSecondaryColor` a neutral `#9A9AA4`) per
+  direct user feedback ("sick of the purple") — the teal/green/blue/orange
+  accent colors and the off-white `TextPrimaryColor` are unchanged, since
+  those are what's actually logo-derived and read cleanly against either
+  background. If asked to touch the palette again, treat the accent
+  colors as the settled brand identity and the background ramp as the
+  part that's actually been revised once already at the user's request.
+  New views should reference these `StaticResource` brushes rather than
+  hardcoding colors; three spots can't bind to a `StaticResource` and must
+  be kept in sync by hand if the palette in `App.xaml` ever changes:
+  the two status-dot converters (`BoolToBrushConverter`,
+  `SlotStateToBrushConverter` — the latter only uses the unchanged accent
+  colors, so it didn't need updating this time) and `Charts/ChartTheme.cs`
+  (OxyPlot's `PlotModel` is a plain C# object, not a WPF
+  `DependencyObject`).
 - Accel+Temp's panel exists and renders, but its command/response payload
   layout in `OnFrameReceived` is an **explicit placeholder** — marked with
   a `TODO` comment — because that ProtoMod's actual firmware command set
@@ -393,7 +404,19 @@ needed to work on this app — this file has what's actually relevant here.
 - **Traffic log** — a collapsed-by-default panel at the bottom of the window
   (`TrafficLogViewModel`) shows every frame sent/received (hex + decoded fields) plus
   framing errors and disconnect events, capped at the last 500 entries. Useful first
-  stop when something doesn't behave as expected against real hardware.
+  stop when something doesn't behave as expected against real hardware. **The Info
+  column is populated as of 2026-08-30** — every row gets a human-readable summary
+  via `Models/FrameInterpreter.cs` (`Describe(ProtocolFrame)`), e.g. `SetCurrentLimitMa:
+  100 mA` or `Error: PROTOCOL_ERR_NOT_IMPLEMENTED (0x04)`, instead of showing "-" for
+  every normal frame the way it used to. It mirrors the payload layouts each panel's
+  own `OnFrameReceived`/`SendCommand` already implement — if one of those layouts
+  changes, update the matching case in `FrameInterpreter` too, or the Info column will
+  quietly go stale while the panel itself stays correct. The Traffic Log grid also has
+  explicit `Length` and `Checksum` columns now (the two Raw Frame byte "blocks" not
+  already broken out into Module/MsgType/Payload) and a tooltip on the Raw Frame
+  column header explaining the full byte layout — added specifically so the raw hex
+  didn't have to be removed to make the grid readable, per an explicit user
+  instruction not to drop the raw data.
 - **Disconnect detection** — `SerialService` treats `IOException`,
   `UnauthorizedAccessException`, `InvalidOperationException`, and (as of
   2026-08-30) `TimeoutException` from the background read loop or a `Send()`

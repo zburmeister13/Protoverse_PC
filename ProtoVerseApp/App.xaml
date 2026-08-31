@@ -8,21 +8,26 @@
         <conv:SlotStateToBrushConverter x:Key="SlotStateToBrushConverter"/>
 
         <!--
-            ProtoVerse brand palette, matched to the logo lockup (deep navy field,
-            teal->green orbit mark, blue/orange ProtoMod accents). Central resource
-            dictionary so individual views only ever reference a StaticResource key,
-            never a hardcoded color - keeps a future palette tweak to this one file.
+            ProtoVerse brand palette. Background/surface ramp is near-black (swapped
+            2026-08-30 from an earlier deep-navy/purple scheme per direct user
+            feedback - "sick of the purple"); the teal->green orbit mark and
+            blue/orange ProtoMod accents from the logo are unchanged, since those are
+            what actually reads as "ProtoVerse" against any background. Central
+            resource dictionary so individual views only ever reference a
+            StaticResource key, never a hardcoded color - keeps a future palette
+            tweak to this one file (plus the three places noted below that can't
+            bind to a StaticResource and must be kept in sync by hand).
         -->
-        <Color x:Key="BgColor">#FF1B1642</Color>
-        <Color x:Key="SurfaceColor">#FF241D57</Color>
-        <Color x:Key="SurfaceAltColor">#FF2E2569</Color>
-        <Color x:Key="BorderColor">#FF3D3475</Color>
+        <Color x:Key="BgColor">#FF0A0A0C</Color>
+        <Color x:Key="SurfaceColor">#FF17171B</Color>
+        <Color x:Key="SurfaceAltColor">#FF212126</Color>
+        <Color x:Key="BorderColor">#FF35353C</Color>
         <Color x:Key="AccentTealColor">#FF3FD6C4</Color>
         <Color x:Key="AccentGreenColor">#FF6FCF61</Color>
         <Color x:Key="AccentBlueColor">#FF4FA9E0</Color>
         <Color x:Key="AccentOrangeColor">#FFF2994A</Color>
         <Color x:Key="TextPrimaryColor">#FFF5F0E6</Color>
-        <Color x:Key="TextSecondaryColor">#FFA79FD1</Color>
+        <Color x:Key="TextSecondaryColor">#FF9A9AA4</Color>
 
         <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}"/>
         <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}"/>

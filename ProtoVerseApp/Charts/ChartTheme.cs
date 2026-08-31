@@ -19,10 +19,10 @@ namespace ProtoVerseApp.Charts
         public const string LeftAxisKey = "Left";
         public const string RightAxisKey = "Right";
 
-        public static readonly OxyColor Background = OxyColor.FromRgb(0x24, 0x1D, 0x57); // SurfaceColor
-        public static readonly OxyColor GridLines = OxyColor.FromRgb(0x3D, 0x34, 0x75);   // BorderColor
+        public static readonly OxyColor Background = OxyColor.FromRgb(0x17, 0x17, 0x1B); // SurfaceColor
+        public static readonly OxyColor GridLines = OxyColor.FromRgb(0x35, 0x35, 0x3C);   // BorderColor
         public static readonly OxyColor Text = OxyColor.FromRgb(0xF5, 0xF0, 0xE6);        // TextPrimaryColor
-        public static readonly OxyColor TextMuted = OxyColor.FromRgb(0xA7, 0x9F, 0xD1);   // TextSecondaryColor
+        public static readonly OxyColor TextMuted = OxyColor.FromRgb(0x9A, 0x9A, 0xA4);   // TextSecondaryColor
 
         public static readonly OxyColor AccentTeal = OxyColor.FromRgb(0x3F, 0xD6, 0xC4);
         public static readonly OxyColor AccentGreen = OxyColor.FromRgb(0x6F, 0xCF, 0x61);
