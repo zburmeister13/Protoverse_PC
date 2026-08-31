@@ -202,6 +202,33 @@ needed to work on this app — this file has what's actually relevant here.
   fixing/deleting it (their user's call to make, not this session's). This
   likely means the CubeIDE/Eclipse build — which doesn't exclude `init.c` —
   has never linked successfully either, though that's unconfirmed.
+- **Fixed 2026-08-30: an unbounded `CDC_Transmit_FS()` retry in
+  `protocol.c`'s `Protocol_SendFrame()` could freeze ProtoCore's entire
+  main superloop, silently and permanently.** `USBD_BUSY` only clears once
+  the host actually drains the previous IN transfer, which firmware
+  doesn't control — if this app's read side was ever briefly slow (a
+  realistic case: the real report that found this was the user clicking a
+  panel's Apply button several times in quick succession), the retry loop
+  could spin forever, so `poll_protocol()` never ran again and *every*
+  subsequent Command of any type — any module, any payload — was dropped
+  silently forever, with no `Error` response either, until a physical
+  reset. Diagnosed entirely from this app's Traffic Log (see CHANGELOG
+  entry 38): the tell was two clean `SetCurrentLimitMa` exchanges followed
+  by total silence on later commands regardless of the value sent, ruling
+  out a payload-specific bug. Firmware fixed it by bounding the retry to a
+  100ms timeout (`PROTOCOL_TX_TIMEOUT_MS`) that drops the one frame instead
+  of hanging the system; flashed and download-verified on the bench board,
+  firmware commit `9fce051`. **Not yet re-confirmed against real
+  hardware** — the fix is flashed, but nobody has yet repeated the
+  rapid-repeated-command pattern that originally triggered it to confirm
+  it no longer wedges. If a module stops responding again after this, this
+  exact class of bug is now fixed, so suspect something new rather than
+  assuming it's this same issue recurring — but do check the Traffic Log
+  first either way: silence (nothing at all, even though the connection
+  otherwise looks healthy) and an explicit `Error` response are different
+  failure modes on ProtoCore's side, and only the Traffic Log can tell
+  them apart — this app has no other way to distinguish "firmware is alive
+  and rejecting the frame" from "firmware's main loop itself stopped."
 - Full spec and rationale: see `README.md` in the repo root.
 
 ## Current state

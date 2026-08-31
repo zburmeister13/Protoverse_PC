@@ -1490,3 +1490,63 @@ this app's side.
   changes" symptom was a stale bench-board flash, now resolved. Retest
   against real hardware is the next step, not yet confirmed as of this
   entry.
+
+### 38. Diagnosed a real firmware main-loop freeze: unbounded CDC_Transmit_FS retry
+**2026-08-30, 23:08 CDT**
+
+**Prompt:** "check the ongoing logs and ID why the FW may have become
+unresponsive."
+
+**Purpose:** Root-cause a second real-hardware symptom, seen right after
+entry 37's reflash: the Electronic Load panel would work for a while, then
+stop getting any reply at all to further commands - no `Response`, no
+`Error` either, unlike entry 37's case.
+
+**Changes:**
+- No code changed in this app - root cause was firmware-side, but the
+  diagnosis itself was done entirely from this app's own Traffic Log,
+  which is what actually made it findable. Read the live running
+  instance's Traffic Log (not a guess) and found: `SetCurrentLimitMa(10mA)`
+  and `SetCurrentLimitMa(250mA)` each got a correct, promptly-returned
+  `Response` (`0A 00 04` and `FA 00 4C` respectively - both match the
+  calibration math). Then `SetCurrentLimitMa(100mA)`, sent six times in a
+  row as the user kept clicking Apply, got zero reply to any attempt over
+  ~4 seconds - not a rejection, just silence. This app's own connection
+  never dropped (no `Disconnected` event, no read/write timeout exception,
+  slots stayed populated) and every TX write completed normally, ruling
+  out a cable/COM-port problem on this side.
+- Scrolling further back in the same log surfaced a second, separate
+  silent burst - `SetCurrentLimitMa(1mA)` sent five times with zero replies
+  - and an *earlier*, successful `100mA` exchange from before either silent
+  window. That combination (100mA worked once, then didn't; a completely
+  different value also went silent) was the key detail: it ruled out a
+  value-specific bug in the duty-cycle math and pointed at something
+  timing/state-related instead. Reported both data points to the firmware
+  session.
+- Firmware session found and fixed the real cause: `protocol.c`'s
+  `Protocol_SendFrame()` retried `CDC_Transmit_FS()` in an **unbounded**
+  loop whenever it returned `USBD_BUSY` - a flag that only clears once the
+  host actually drains the previous IN transfer, which firmware doesn't
+  control. A brief slowdown on this app's read side (very plausible with
+  several rapid Apply clicks queuing up) could leave that loop spinning
+  forever, freezing ProtoCore's entire main superloop - `poll_protocol()`
+  never runs again, so *every* subsequent Command of any type is silently
+  dropped for good, regardless of module or payload, until a physical
+  reset. Nothing to do with current-limit values at all, which explains
+  why the symptom looked value-independent once enough data points came
+  in. Fixed firmware-side by bounding the retry to a 100ms timeout
+  (`PROTOCOL_TX_TIMEOUT_MS`) - past that it drops the one frame and
+  returns, rather than hanging the system. Built, flashed to the bench
+  board, verified via download-verify, and pushed on the firmware side
+  (commit `9fce051`).
+- **Not yet re-confirmed against real hardware** - the fix is flashed, but
+  the user hasn't yet repeated the rapid-Apply pattern that originally
+  triggered the freeze to confirm it no longer wedges the board. Don't
+  treat this as fully closed until that retest happens.
+- Worth remembering for future diagnosis on this side: a silent freeze
+  (zero bytes back, connection otherwise looks healthy) versus an explicit
+  `Error` response are different failure modes with different causes here
+  - a `MSG_ERROR` means firmware is alive and rejecting the frame, silence
+  after previously-working exchanges means the MCU's main loop itself may
+  have stopped running. The Traffic Log is the tool that distinguishes
+  them; this app has no other way to tell the two apart today.
