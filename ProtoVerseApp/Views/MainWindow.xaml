@@ -5,6 +5,7 @@
         xmlns:views="clr-namespace:ProtoVerseApp.Views"
         xmlns:conv="clr-namespace:ProtoVerseApp.Converters"
         Title="ProtoVerse" Height="700" Width="900"
+        Icon="/Assets/AppIcon.ico"
         Background="{StaticResource BgBrush}" Foreground="{StaticResource TextPrimaryBrush}">
 
     <Window.Resources>

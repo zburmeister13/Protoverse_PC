@@ -77,11 +77,14 @@ namespace ProtoVerseApp.Services
             {
                 _serial.Send(frame);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or TimeoutException)
             {
                 // If this was an unexpected drop, the transport already raised
                 // Disconnected to tell the UI - swallow here so a button click can't
-                // crash the UI thread on a pulled cable.
+                // crash the UI thread on a pulled cable. TimeoutException included
+                // alongside the others since SerialService now bounds its read/write
+                // timeouts instead of blocking forever on a dead handle - a timeout is
+                // just as much "the transport is gone" as an IOException is.
                 return;
             }
 

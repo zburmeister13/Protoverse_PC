@@ -1035,3 +1035,458 @@ turned out to be accurate.
 - Verified live via UI Automation: rebuilt, launched, expanded the Help tab,
   confirmed AccelTemp now shows circuit code `E03` (not `F02`) and the new
   revision note appears.
+
+### 28. Make hot-swap presence-report handling fault-isolated
+**2026-08-30, 14:46 CDT**
+
+**Prompt:** "what about making the app safe against hot swapping modules on
+the board? I don't want that to result in a bricked app" (after being asked
+to set aesthetics aside and focus on functionality).
+
+**Purpose:** `App.xaml.cs` already has a global `DispatcherUnhandledException`
+handler (logs, shows a dialog, marks handled so the process itself survives)
+- a reasonable last resort, but not a good hot-swap experience: it exists to
+catch truly unexpected bugs, not to be the normal response to something as
+routine as pulling a module. The real gap was underneath it -
+`MainViewModel.OnFrameReceived` rebuilt `Panels` destructively (`Clear()`
+then re-add in a loop with no error handling), so a single module's panel
+constructor throwing mid-rebuild would leave the collection half-populated
+and surface as a scary global error dialog for a routine hot-swap.
+
+**Changes:**
+- `ViewModels/MainViewModel.cs` — `OnFrameReceived` now builds the new slot
+  lineup in a local list first and only swaps it into the live `Panels`
+  collection once fully built, so the currently-displayed (working) panels
+  are never disturbed by a failure elsewhere in the same rebuild. Each
+  slot's panel construction is individually wrapped in try/catch - a
+  misbehaving module type degrades just that one slot to
+  `UnknownModuleViewModel` (with the specific slot/type/exception recorded
+  in `StatusMessage`) instead of losing the whole report. `DetachModulePanels`
+  similarly wraps each panel's `Detach()` call so one panel's cleanup
+  misbehaving can't block detaching the rest or stall a hot-swap rebuild.
+- Verified with genuine fault injection, not just reasoning about it:
+  temporarily made `ModuleCatalog`'s `BlinkyLed` factory throw
+  unconditionally, rebuilt, connected in Simulator mode, and confirmed the
+  app stayed alive and responsive with no crash dialog - slot 0 showed
+  "Unsupported module (BlinkyLed, 0x0001)" and `StatusMessage` read
+  `3 ProtoMod(s) detected - panel error in slot 0 (BlinkyLed):
+  InvalidOperationException`, while slots 1 and 2 (Accel+Temp, Electronic
+  Load) populated completely normally, unaffected. Reverted the fault
+  injection afterward and rebuilt/re-verified normal 3-module operation was
+  fully restored.
+
+### 29. Add BasicLed + Unknown ProtoModIds; distinguish the two "unknown" meanings
+**2026-08-30, 15:24 CDT**
+
+**Prompt:** none - the firmware session reported two compile/link-verified
+changes unprompted: the "board two" mystery from entries 26-27 is now fully
+closed with real hardware evidence (a raw-serial capture), not just
+documentation inference.
+
+**Purpose:** The physical board that started the whole AccelTemp/"F02"
+saga was never AccelTemp at all - it's real hardware with a valid EEPROM
+that simply wasn't in firmware's catalog, so it reported as `ProtoModId.None`
+(indistinguishable from an empty slot) the entire time. Firmware fixed the
+root cause (a genuinely missing catalog entry, not a guess-the-mapping
+problem) and added a new sentinel so "present but unrecognized" and "empty"
+are no longer conflated on the wire.
+
+**Changes:**
+- `Models/ProtoModId.cs` — added `BasicLed = 0x0004` (Simple LED,
+  Fundamentals series, circuit code "F02" - confirmed to be exactly the
+  board the manuals described, it just needed its own catalog entry instead
+  of being confused with AccelTemp) and `Unknown = 0xFFE0` (a slot ProtoCore
+  itself can't identify - valid EEPROM read, no catalog match - reported
+  instead of `None` so it's distinguishable from an empty slot).
+- `Models/ProtoModBoardCatalog.cs` — added the `BasicLed`/"F02" entry;
+  updated the class doc comment to record the full resolution.
+- `ViewModels/UnknownModuleViewModel.cs` — this view model covers two
+  conceptually different situations that happen to share one appearance
+  (both render as the orange/Unsupported status): a real, firmware-known
+  `ProtoModId` this app build just has no panel for yet (routine, fix is
+  "update this app" - `BasicLed` currently falls here, since firmware's
+  stub has no behavior yet either), versus `ProtoModId.Unknown` (fix is
+  "update firmware's catalog," a completely different situation). Previously
+  both showed the identical "Unsupported module (...)" text; now
+  `ProtoModId.Unknown` gets its own message: "Something's plugged in here,
+  but ProtoCore doesn't recognize its EEPROM identity." This distinction is
+  exactly what was missing when this same ambiguity caused real
+  troubleshooting confusion earlier today.
+- Verified live via UI Automation: temporarily reconfigured
+  `MockSerialService`'s `InstalledMods` to report `BasicLed`, `Unknown`, and
+  `ElectronicLoad`; rebuilt; confirmed all three render distinctly and
+  correctly ("Unsupported module (BasicLed, 0x0004)" vs. the new Unknown
+  message vs. a normal Electronic Load panel). Reverted the simulator back
+  to its normal default afterward and rebuilt/re-verified.
+- Not added to `ModuleCatalog.Registrations`/`SupportedModules` - `BasicLed`
+  has no real panel or firmware behavior yet, so it correctly stays out of
+  the Help tab's "supported" list until one exists.
+
+### 30. Show circuit code instead of raw hex ID for an unsupported ProtoMod
+**2026-08-30, 15:28 CDT**
+
+**Prompt:** "Isntead of showing 0x0004 (which I don't know where that is
+coming from) show the circuit code for the unsupported module (F01, F02,
+etc. etc.)" (after being shown `ProtoMod_Programmer.ino`'s EEPROM layout
+again, which is where circuit codes like "F02" actually come from - what's
+printed/programmed onto the physical board).
+
+**Purpose:** `ProtoModId`'s raw hex value (`0x0004`) is an internal wire
+protocol detail with no meaning to a person looking at the app - the circuit
+code is what's actually on the board and in the manuals, so it's the right
+thing to show for "what is this unsupported thing."
+
+**Changes:**
+- `ViewModels/UnknownModuleViewModel.cs` — the "recognized but unsupported"
+  message now looks up the circuit code from `ProtoModBoardCatalog.Entries`
+  and leads with it (e.g. "Unsupported module: BasicLed (circuit code F02)")
+  instead of the raw hex ID. Falls back to the hex ID only when a type is
+  genuinely uncataloged on this side too (not yet mirrored into
+  `ProtoModBoardCatalog.cs`) - still better than showing nothing.
+  `ProtoModId.Unknown`'s separate message (entry 29) is unaffected - it
+  already didn't show a hex ID.
+- Verified live via UI Automation, both paths: temporarily reconfigured
+  `MockSerialService` to report `BasicLed` (cataloged - confirmed it now
+  shows "Unsupported module: BasicLed (circuit code F02)") and a genuinely
+  uncataloged raw ID `0x1234` (confirmed the hex fallback still works:
+  "Unsupported module: 4660 (0x1234)"). Reverted the simulator back to
+  normal afterward and rebuilt/re-verified.
+
+### 31. Fix: a failed real-port Connect() could surface as an unhandled exception
+**2026-08-30, 16:42 CDT**
+
+**Prompt:** the user pasted a live crash: `System.IO.IOException: A device
+attached to the system is not functioning.` thrown from
+`SerialPort.Open()`, with a stack trace matching `App.xaml.cs`'s crash
+reporter format exactly (the same one that logs to `crash_log.txt`, copies
+to clipboard, and shows a dialog) - almost certainly hit while trying to
+connect to the real board's COM port.
+
+**Purpose:** `SerialService.Connect()` called `_port.Open()` with zero
+exception handling, and neither `FrameDispatcher.Connect()` nor
+`MainViewModel.Connect()` caught it either - so any real, expected failure
+mode (a flaky USB CDC driver, the board resetting mid-open, another program
+already holding the port, a bad port name) fell all the way through to the
+global unhandled-exception dialog instead of a normal "failed to connect"
+status message. The global handler is a last resort for genuine bugs, not
+the intended response to a routine connect failure - same principle as
+entry 28's hot-swap fault isolation, just a different code path.
+
+**Changes:**
+- `Services/SerialService.cs` — `Connect()` now wraps `port.Open()` in
+  try/catch: on failure, unsubscribes `DataReceived`, disposes the failed
+  `SerialPort`, and rethrows, rather than leaving a half-opened port
+  assigned to `_port` for a later call to trip over. `_port` is now only
+  ever assigned after a successful `Open()`.
+- `ViewModels/MainViewModel.cs` — `Connect()` now catches
+  `IOException`/`UnauthorizedAccessException`/`InvalidOperationException`
+  around `_dispatcher.Connect(...)` (same exception-type set
+  `SerialService.IsDisconnectException` already uses elsewhere in this
+  codebase, for consistency) and turns it into
+  `StatusMessage = "Failed to connect to {port}: {reason}"` instead of
+  letting it propagate.
+- Verified with genuine fault injection, not just reasoning: temporarily
+  added a nonexistent `"COM250"` to `AvailablePorts`, rebuilt, selected it
+  with Simulator mode off, and clicked Connect. Confirmed the app stayed
+  alive and responsive (no crash dialog) and `StatusMessage` read
+  `Failed to connect to COM250: Could not find file 'COM250'.` — the exact
+  clean failure this fix was meant to produce. Reverted the fault injection
+  afterward, rebuilt, and re-confirmed normal Simulator-mode connect still
+  works.
+
+### 32. Bound SerialPort's read/write timeouts to stop a dead handle from freezing the UI
+**2026-08-30, 17:04 CDT**
+
+**Prompt:** relayed from the firmware session, diagnosing a real user report:
+after fixing an earlier unplug-freeze (I2C bus recovery, firmware-side),
+re-inserting a ProtoMod board now causes ProtoCore's own supply rail to sag
+enough to trigger a real MCU brownout reset (`POR/PDR`, confirmed via a live
+RCC_CSR capture) - a genuine hardware/connector issue, not fixable in
+software on either side. But afterward, "the app becomes unresponsive,"
+which *is* a software question: does this app's serial handling actually
+recover from an abrupt, real (not simulated) USB disconnect+reconnect?
+
+**Purpose:** Checked the actual code rather than guessing. Confirmed a real
+bug matching the symptom exactly: `SerialService`'s `SerialPort` was
+constructed with no `ReadTimeout`/`WriteTimeout` (both default to
+`SerialPort.InfiniteTimeout`), and `Send()` is called **synchronously on the
+UI thread** (traced through `FrameDispatcher.Send()`, invoked directly by
+every button-click `RelayCommand` - Toggle, Apply, Identify Slots, etc.). If
+a disconnected/reset device's OS-level handle blocks on `Write()`/`Read()`
+instead of erroring promptly - plausible for the timing/abruptness of a
+brownout-triggered reset, per the firmware session's question - that hang
+would freeze the entire app, not just fail one command. `IsDisconnectException`
+also didn't include `TimeoutException`, so even a bounded timeout alone
+wouldn't have been caught and treated as a disconnect.
+
+**Changes:**
+- `Services/SerialService.cs` — `Connect()` now sets `port.ReadTimeout` and
+  `port.WriteTimeout` to 1000ms (generous for a real frame - max 250 bytes
+  at 115200 baud takes low tens of ms - while still recovering promptly from
+  a genuinely dead port) before opening. `IsDisconnectException` now
+  includes `TimeoutException` alongside `IOException`/
+  `UnauthorizedAccessException`/`InvalidOperationException`, so a timed-out
+  Read/Write tears the port down and raises `Disconnected` exactly like the
+  other failure modes already did.
+- `Services/FrameDispatcher.cs` — `Send()`'s catch filter also gained
+  `TimeoutException`, so a timeout gets swallowed the same way the other
+  disconnect-related exceptions already are (the transport already raised
+  `Disconnected` to tell the UI; this just stops a button click from
+  crashing the UI thread on top of that).
+- **Verification caveat, stated plainly:** rebuilt and regression-tested
+  that normal Simulator-mode connect/command flow is unaffected (it is -
+  `MockSerialService` doesn't touch `SerialPort` at all, so this change
+  can't be exercised through the simulator). The actual failure mode this
+  fixes - a real OS-level handle hanging instead of erroring on a genuinely
+  dead port - can't be honestly verified without a real disconnect/reset
+  event, which needs real hardware. The firmware session offered to
+  reproduce the brownout reset on demand via their ST-Link access
+  specifically so this can be tested against a real instance; accepted that
+  offer rather than claim this is confirmed fixed on reasoning alone.
+- Two open questions from the firmware session not yet answered, both need
+  real hardware to observe rather than being answerable in code: whether
+  Windows keeps the same COM port number across this kind of reset or
+  assigns a new one, and confirming this exact fix actually prevents the
+  freeze against a real reproduction (not just a plausible mechanism).
+
+### 33. Firmware's attempted repro: SWD/NRST reset does not reproduce the freeze
+**2026-08-30, 17:06 CDT**
+
+**Prompt:** none - the firmware session tried the repro it offered in entry
+32 (an ST-Link-triggered NRST reset) and reported back a negative result
+unprompted.
+
+**Purpose:** Record a genuinely useful negative result so a future session
+doesn't waste time trying the same SWD-based repro approach again.
+
+**Changes:**
+- No code changes. Firmware polled `Get-PnpDevice` at 500ms resolution
+  through an ST-Link-triggered NRST reset and found the COM port stayed
+  continuously `Present=True`/`Status=OK` with zero flicker, and nothing
+  appeared in the System event log around that timestamp either - an NRST
+  reset disturbs the MCU core but not VBUS/the USB link enough for Windows
+  to notice at all, let alone the disconnect chime + re-enumeration the user
+  actually sees. Confirms the real event (`POR/PDR`, a supply-level
+  brownout from physical board insertion) can't be triggered remotely via
+  SWD - firmware has no way to induce an actual VDD sag without physical
+  access to the connector.
+- Practical consequence: entry 32's timeout fix remains unverified against
+  the real failure mode, and can only be closed out by the user watching a
+  real board reinsertion happen after retesting with the fix in place -
+  there's no remaining path to a synthetic repro on either side. Also still
+  open: whether Windows keeps the same COM port number across the real
+  reset or assigns a new one - same answer, only observable live.
+- `CLAUDE.md` — noted this negative result in the disconnect-detection entry
+  so a future session doesn't re-attempt an SWD/NRST-based repro.
+
+### 34. Add a real app/window icon, built from the ProtoVerse logo
+**2026-08-30, 17:16 CDT**
+
+**Prompt:** "can you make the tool bar icon for the app nice looking if I
+give you an image to use" → user pasted the ProtoVerse orbit-mark logo
+directly into chat. This app had no icon set at all before this (flagged as
+a gap in an earlier modernization discussion) - it showed WPF's generic
+default icon everywhere (taskbar, title bar, Alt-Tab, Explorer).
+
+**Purpose:** A pasted chat image isn't automatically a file this session can
+process - no filesystem path is exposed for it, and a session-wide search
+turned up nothing (one candidate, `%TEMP%\zburm.bmp`, turned out to be an
+unrelated stale mountain-landscape image once actually opened). The user
+then saved the real file to `PROTOVERSE\logo.jpg` and pointed at it directly,
+which resolved the blocker.
+
+**Changes:**
+- Background removal: sampled the JPEG's background color (very consistent
+  navy, RGB 28/18/68, closely matching the app's own `BgColor` brand token)
+  from all four corners, then chroma-keyed every pixel against it with a
+  soft-edged alpha ramp (not a hard cutoff) so the mark's own anti-aliased
+  edges against JPEG compression noise didn't come out jagged. Verified the
+  result pixel-by-pixel in the one region that looked like it might be a
+  stray artifact in a downscaled preview - confirmed via a raw alpha scan
+  that it was genuinely part of the orbit ring's curling tail, not noise.
+- Computed the non-transparent content's bounding box, cropped to it plus a
+  small margin, and centered it on a square transparent canvas (source was
+  255×208, non-square) so later resizing to square icon sizes doesn't
+  stretch it.
+- `ProtoVerseApp/Assets/AppIcon.ico` (new) — hand-assembled a real
+  multi-resolution `.ico` (16/32/48/256px, PNG-compressed entries per size,
+  valid since Windows Vista) via `System.Drawing`, since .NET has no
+  built-in multi-size ICO writer. Also kept
+  `Assets/logo_transparent_master.png` (the cropped/centered transparent
+  source) for any future re-export at a different size.
+- `ProtoVerseApp.csproj` — added `<ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>`
+  (controls the `.exe` itself - taskbar/Explorer) and a `<Resource Include="Assets\AppIcon.ico" />`
+  item (so `Window.Icon` can locate it at runtime via pack URI).
+- `Views/MainWindow.xaml` — added `Icon="/Assets/AppIcon.ico"` to the
+  `Window` (controls the title bar/Alt-Tab icon specifically).
+- Verified live with real screenshots, not just a successful build: captured
+  the actual running window's title bar via `GetWindowRect` +
+  `Graphics.CopyFromScreen` and confirmed the orbit mark renders correctly
+  next to "ProtoVerse". The taskbar screenshot initially looked like it
+  still showed a generic icon - extracted the icon directly from the built
+  `.exe` via `Icon.ExtractAssociatedIcon` (bypasses Explorer's shell icon
+  cache entirely) and confirmed the correct icon *is* embedded; the taskbar
+  view was Explorer's icon cache showing a stale image for that exact file
+  path after dozens of rebuilds this session, not an actual defect - not
+  something the app can fix, resolves itself after an Explorer
+  restart/reboot.
+- **Confirmed live, same session:** the user reported the taskbar still
+  showed a generic icon after the above. Cleared the icon cache directly
+  (`%LocalAppData%\IconCache.db` and `%LocalAppData%\Microsoft\Windows\
+  Explorer\iconcache_*.db`/`thumbcache_*.db`) and restarted `explorer.exe`,
+  then relaunched the app. Located the exact taskbar button via UI
+  Automation (`Shell_TrayWnd` → the "Running applications" pane's
+  `BoundingRectangle` - Windows 11's modern taskbar doesn't expose
+  individual per-app buttons through `UIAutomation` the way Windows 10's
+  did, so the pane-level rect was the only reliable anchor) and screenshotted
+  that exact region. Confirmed the real orbit-mark icon now renders
+  correctly in the taskbar - the fix was correct all along, it just needed
+  the stale cache cleared.
+
+### 35. Icon sizing/weight iteration: bolder strokes rejected, tight no-clip crop kept
+**2026-08-30, 17:50 CDT**
+
+**Prompt:** a sequence of live-tested adjustments - "make it bigger and the
+lines thicker... visual strength of the other icons... next to VS Code" →
+(shown a real taskbar comparison) "doesn't look much different - go much
+bigger and more bold!!" → (shown a much bolder version) "that's pretty bad,
+go back to the very first iteration" → "just zoom in... minimal margins" →
+"bigger! I want the rings... near the edge of the icon max size" → (shown a
+version with the orbit tails clipped) "too big! it's clipped haha... just
+need all of it to fit."
+
+**Purpose:** Converge on a final icon after directly testing several
+distinct approaches against the real taskbar rather than guessing at one.
+
+**Changes:**
+- Tried morphological dilation (a two-pass separable max-filter over the
+  alpha channel, since .NET has no built-in "grow" filter and a naive
+  per-pixel circular-kernel version was too slow to run) to thicken the
+  extracted line art. Confirmed live against the real taskbar, next to
+  VS Code/Excel/PowerPoint: even a moderate dilation radius closed some of
+  the visual-weight gap, but pushing it enough to really match solid-fill
+  icons collapsed the design into an unrecognizable blob at 32px/16px -
+  rejected outright once shown, not worth the loss of the orbit/circuit
+  shape. Reverted to the un-dilated original stroke weight.
+- Cropping/scaling iteration on the *undilated* art, each version verified
+  by regenerating and visually checking both 256px and 32px renders:
+  a small margin (original) → zero-margin "contain" fit (fills the mark's
+  longer dimension - width, 225px - edge to edge, letterboxes the shorter
+  dimension - height, 141px - since the source is a wide/short 1.6:1 shape)
+  → scaling further to fill *both* dimensions, which necessarily clips the
+  orbit ring's curled tail tips left/right since the shape isn't square →
+  rejected once shown clipped, back to the zero-margin contain fit as the
+  final answer. That's the mathematically largest the mark can be at this
+  aspect ratio without cutting anything off.
+- `Assets/AppIcon.ico` / `Assets/logo_transparent_master.png` — final state:
+  zero-margin chroma-keyed extraction, original (undilated) stroke weight,
+  contain-fit centered on the square canvas. Verified live against the
+  taskbar (full-screen capture cropped in memory, not a direct small-region
+  `CopyFromScreen` - see the note below) after each change, with the
+  standard icon-cache-clear-and-Explorer-restart already documented in
+  entry 34's CLAUDE.md gotcha.
+- **New tooling note:** a direct small-region `Graphics.CopyFromScreen` of
+  just the taskbar strip intermittently returned a blank white image, while
+  capturing the full 1920×1080 desktop and cropping the same region out of
+  that bitmap in memory worked reliably every time - likely a DWM/hardware-
+  overlay quirk with partial `BitBlt` capture of Windows 11's modern
+  taskbar. Prefer full-screen-capture-then-crop for any future taskbar
+  screenshot verification.
+
+### 36. Electronic Load: real wire format lands, "measured" chart dropped (open-loop hardware)
+**2026-08-30, 21:43 CDT**
+
+**Prompt:** a cross-session message from the firmware session reporting that
+`protomod_electronic_load.c` now has real `SetCurrentLimitMa` command
+handling, with a Response shape that differs from this app's placeholder,
+and flagging (not deciding unilaterally) that the resulting UI mismatch
+needed a call from the user - answered via `AskUserQuestion`: "Drop the
+chart entirely."
+
+**Purpose:** Stop building against a placeholder payload now that firmware
+has a real one, and resolve the UI implication that real hardware here
+cannot produce the "measured" telemetry the original panel design assumed.
+
+**Changes:**
+- Confirmed via the firmware session: this ProtoMod's current revision is
+  genuinely open-loop (bit-banged PWM low-passed into an op-amp forcing
+  current through a 10-ohm sense resistor) with no ADC feedback path at
+  all - there is no measured voltage/current this hardware can ever report,
+  not a gap that will close once parsing is fixed.
+- `ViewModels/ElectronicLoadViewModel.cs` - replaced the placeholder 4-byte
+  `[voltage_mV, current_mA]` parse and `MeasuredVoltage`/`MeasuredCurrentMa`
+  properties with the real 3-byte `[current_ma_lo, current_ma_hi,
+  duty_percent]` Response format (current is an echo of what was
+  commanded, not a measurement). Removed the `PlotModel`/`LineSeries`/
+  OxyPlot dual-axis chart and its `AppendToChart` method entirely, per the
+  user's answer - added `CommandedCurrentMa` and `DutyPercent` as plain
+  readout properties instead.
+- `Views/ElectronicLoadPanel.xaml` - removed the `oxy:PlotView` and the
+  "measured" V/I readouts; added "Commanded"/"Duty" readouts bound to the
+  new properties, plus an explicit "values above are commanded, not
+  measured" note so the panel doesn't imply real sensing exists.
+- `Services/MockSerialService.cs` - `BuildLoadTelemetry` now returns the
+  real 3-byte format, computing `duty_percent` from the same first-pass
+  calibration the firmware session described (I·R=V, V/VDD=duty, R=10Ω,
+  VDD=3.3V nominal - explicitly not finalized on their side, real hardware
+  verification still pending there). Removed the periodic re-push of load
+  telemetry from `EmitTelemetry`: with no ADC feedback, nothing changes
+  between commands, so the old 1×/sec fake jitter was itself part of the
+  misleading-measurement problem, not something worth simulating anymore.
+- Verified live, not just build-clean: ran the app in Simulator mode,
+  applied a 100 mA current limit through the real UI, and confirmed the
+  panel showed `Commanded: 100 mA` / `Duty: 30%` - matching the calibration
+  math by hand (100 mA × 10 Ω = 1 V, 1 V / 3.3 V ≈ 30%) - via UI
+  Automation driving the actual controls and a full-screen-capture-and-crop
+  screenshot (per entry 35's tooling note), not just reasoning about the
+  code.
+- `CLAUDE.md`'s "Current state" section split the old combined Accel+Temp/
+  Electronic Load placeholder bullet in two: Accel+Temp's payload is still
+  an explicit TODO placeholder, Electronic Load's wire format is now
+  settled and its chart-free UI is a deliberate design choice, not an
+  unfinished panel.
+
+### 37. Diagnosed real-hardware "Commanded stays 0" report: stale firmware, not an app bug
+**2026-08-30, 21:59 CDT**
+
+**Prompt:** "when I hit 100mA and then apply for the load - nothing changes
+in the commanded portions? address and fix if necessary with the other
+agent."
+
+**Purpose:** Root-cause a real-hardware report that entry 36's Electronic
+Load Apply flow appeared to do nothing, and fix it if the problem was on
+this app's side.
+
+**Changes:**
+- No code changed in this app - the root cause was on the firmware side.
+  Reproduced the same Apply flow in Simulator mode via UI Automation first
+  (real click on the Electronic Load panel's own Apply button, not
+  BlinkyLed's - the panel has two buttons named "Apply" and an early
+  automation attempt clicked the wrong one before this was caught) and
+  confirmed this app's code path was correct: `Commanded: 100 mA` /
+  `Duty: 30%` updated exactly as expected.
+- Since the user's report was against real hardware, read the Traffic Log
+  from their actual session (still present in the running app instance)
+  instead of guessing: it showed `TX ElectronicLoad Command 01 64 00`
+  (`SetCurrentLimitMa(100mA)`) answered by `RX ElectronicLoad Error 04`
+  (`PROTOCOL_ERR_NOT_IMPLEMENTED`) - repeated for both the 100mA and a
+  follow-up 30mA attempt. The app correctly received and logged this Error
+  frame; it just has no UI path (in any panel, not just this one) to
+  surface a `MSG_ERROR` response to the user, only to the Traffic Log -
+  which is why nothing appeared to happen instead of showing a visible
+  failure. Noted as a pre-existing gap, not fixed in this entry - the user
+  hasn't asked for it yet.
+- Messaged the firmware session with the exact frame capture. Confirmed
+  cross-session: entry 36's real `SetCurrentLimitMa` handler had compiled
+  and linked but had not actually been flashed to the bench board yet (the
+  firmware session was waiting on a go-ahead before writing to physical
+  hardware) - that board was still running pre-entry-36 firmware, which is
+  exactly why it fell through to `PROTOCOL_ERR_NOT_IMPLEMENTED`. The
+  firmware session then flashed and verified the current build via
+  STM32CubeProgrammer (download verified, MCU reset performed) and
+  committed the change locally on their side.
+- Net result: this app's Electronic Load code has been correct since entry
+  36 in both Simulator mode and against a real frame capture; the "nothing
+  changes" symptom was a stale bench-board flash, now resolved. Retest
+  against real hardware is the next step, not yet confirmed as of this
+  entry.

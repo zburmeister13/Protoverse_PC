@@ -73,15 +73,18 @@ needed to work on this app — this file has what's actually relevant here.
   decision above for why; frame header grew from 3 bytes to 4 accordingly,
   and checksum now XORs both ID bytes). Fixed, locked vocabulary shared with
   the ProtoCore firmware (a separate codebase) — `0x0001` BlinkyLed, `0x0002`
-  AccelTemp, `0x0003` ElectronicLoad, `0xFFF0` Core, `0xFFFF` Broadcast
-  (reserved IDs deliberately live at the top of the range so they read as
-  system addresses, not catalog entries). Adding a ProtoMod means adding an
-  ID here *and* in firmware, together. **`PresenceReport`'s payload is a
-  FIXED `SlotCount*2`-byte array (as of 2026-08-30), not a variable-length
-  list of only the occupied slots** — exactly one `ProtoModId` per physical
-  slot, always in slot order, 2 bytes little-endian each; an empty slot
-  reports `ProtoModId.None` (`0x0000`) rather than being omitted. This
-  replaced an earlier skip-empty-slots format after the user hit a real bug
+  AccelTemp, `0x0003` ElectronicLoad, `0x0004` BasicLed, `0xFFE0` Unknown
+  (ProtoCore couldn't identify what's in the slot — valid EEPROM read, no
+  catalog match — distinct from `None`/empty), `0xFFF0` Core, `0xFFFF`
+  Broadcast (reserved IDs deliberately live at the top of the range so they
+  read as system addresses, not catalog entries). Adding a ProtoMod means
+  adding an ID here *and* in firmware, together. **`PresenceReport`'s
+  payload is a FIXED `SlotCount*2`-byte array (as of 2026-08-30), not a
+  variable-length list of only the occupied slots** — exactly one
+  `ProtoModId` per physical slot, always in slot order, 2 bytes
+  little-endian each; an empty slot reports `ProtoModId.None` (`0x0000`)
+  rather than being omitted. This replaced an earlier skip-empty-slots format
+  after the user hit a real bug
   it caused: with only one slot occupied, "module in slot 0" and "module in
   slot 1, slots 0/2 empty" produced an identical single-entry payload, so a
   module in any slot but the first always rendered in this app's *first*
@@ -176,6 +179,20 @@ needed to work on this app — this file has what's actually relevant here.
   `ProtoMod_Programmer` Arduino sketch (a third codebase, programs a
   ProtoMod's EEPROM over I2C) has no read-only mode, so it can't be used for
   that check without risking overwriting the board.
+- **Fully closed 2026-08-30 with real hardware evidence**, not just the
+  documentation-confirmation above: a raw-serial capture showed the physical
+  board behind this whole saga was never `AccelTemp` at all — it's real
+  hardware with a valid EEPROM that simply wasn't in firmware's catalog yet,
+  so it was reporting as `ProtoModId.None` (indistinguishable from an empty
+  slot) the entire time. Firmware added `ProtoModId.BasicLed` (`0x0004`,
+  circuit code `"F02"` — confirming the manual reading above was right all
+  along, it just needed its own catalog entry) and `ProtoModId.Unknown`
+  (`0xFFE0`, for a slot with a valid-but-uncataloged EEPROM read, so it's no
+  longer indistinguishable from empty). `UnknownModuleViewModel` now shows a
+  different message for `Unknown` ("Something's plugged in here, but
+  ProtoCore doesn't recognize its EEPROM identity") than for a real,
+  firmware-known `ProtoModId` this app just has no panel for — see
+  CHANGELOG entry 29.
 - **Two pre-existing firmware bugs found while wiring this in** (unrelated to
   the protocol itself, noted here since they affect whether ProtoCore even
   boots): `program.c` used `hi2c1` without including `init.h`, and `init.c`
@@ -211,6 +228,32 @@ needed to work on this app — this file has what's actually relevant here.
   back into sending a command, and stop the timer from an overridden
   `Detach()` (now `virtual` on `ModulePanelViewModelBase` for exactly this) so
   a discarded panel's timer doesn't keep ticking forever.
+- **Hot-swap safety.** `App.xaml.cs` has a global `DispatcherUnhandledException`/
+  `AppDomain.UnhandledException` handler (logs to `crash_log.txt`, copies to
+  clipboard, shows a dialog, marks the WPF one handled so the process itself
+  survives) — that's a last resort for genuinely unexpected bugs, not the
+  intended response to routine hot-swapping. The actual hot-swap path is
+  fault-isolated one level up: `MainViewModel.OnFrameReceived` builds the new
+  slot lineup in a local list and only swaps it into the live `Panels`
+  collection once fully built (a failure never disturbs already-working
+  panels), and each slot's `ModuleCatalog.TryCreate` call is individually
+  wrapped in try/catch (one misbehaving module type degrades just that slot to
+  `UnknownModuleViewModel`, doesn't lose the whole report or trigger the
+  global dialog). `DetachModulePanels` does the same per-panel for `Detach()`.
+  Confirmed 2026-08-30 via genuine fault injection (temporarily made a
+  factory throw, verified live) rather than just reasoning about it — see
+  CHANGELOG entry 28. Any future change to `OnFrameReceived`'s rebuild loop
+  should preserve this: build-then-swap, and catch around panel construction.
+  Same principle applies to `Connect()`: a real-port `SerialPort.Open()`
+  failure (bad/busy port, flaky USB CDC driver, board resetting mid-open —
+  hit for real against actual hardware 2026-08-30, see CHANGELOG entry 31)
+  is caught in `SerialService.Connect()` and `MainViewModel.Connect()` and
+  turned into a `StatusMessage`, not left to reach the global handler either.
+  Any code path that can hit a real OS/driver-level failure (port I/O,
+  panel construction, anything touching hardware) should be assumed capable
+  of throwing and caught at the point closest to the failure, converted into
+  a status message or graceful UI state — the global dialog is for bugs,
+  not expected failure modes.
 - **Branded dark theme.** `App.xaml` defines the ProtoVerse brand palette
   (deep navy background, teal/green/blue/orange accents, off-white/lavender
   text — sampled from the logo lockup) as named `Color`/`SolidColorBrush`
@@ -222,16 +265,15 @@ needed to work on this app — this file has what's actually relevant here.
   exception — a converter can't bind to a `StaticResource`, so their brush
   hex values are literal and must be kept in sync by hand if the palette in
   `App.xaml` ever changes.
-- Accel+Temp and Electronic Load panels exist and render, but their
-  command/response payload layouts in `OnFrameReceived` are **explicit
-  placeholders** — marked with `TODO` comments — because those ProtoMods'
-  actual firmware command sets aren't defined yet. Don't treat those byte
-  layouts as settled. **Their UI is real, though, not a placeholder** — both
-  panels have live OxyPlot charts (`Charts/ChartTheme.cs` builds the
-  dark-themed `PlotModel`s) built deliberately decoupled from that parsing:
-  `OnFrameReceived` turns bytes into properties, a separate
-  `AppendToChart(s)` method just plots whatever those properties currently
-  hold. Accel+Temp specifically: a temperature trend line, an X/Y
+- Accel+Temp's panel exists and renders, but its command/response payload
+  layout in `OnFrameReceived` is an **explicit placeholder** — marked with
+  a `TODO` comment — because that ProtoMod's actual firmware command set
+  isn't defined yet. Don't treat that byte layout as settled. **Its UI is
+  real, though, not a placeholder** — it has live OxyPlot charts
+  (`Charts/ChartTheme.cs` builds the dark-themed `PlotModel`s) built
+  deliberately decoupled from that parsing: `OnFrameReceived` turns bytes
+  into properties, a separate `AppendToChart(s)` method just plots whatever
+  those properties currently hold — a temperature trend line, an X/Y
   "bubble-level" tilt plot (fixed ±1.5g axes so the origin is always the
   visual center, a single `ScatterSeries` point moved each update rather
   than a trend history), and a Z fill gauge (`LinearBarSeries` with
@@ -239,8 +281,53 @@ needed to work on this app — this file has what's actually relevant here.
   per the user's spec) — not three trend lines. This was built and verified
   entirely against Simulator mode's fake telemetry, on purpose, so the UI
   didn't have to wait on firmware defining the real payload — when that
-  lands, only the parsing changes, not the
-  charts. Follow the same split for any future panel that streams data.
+  lands, only the parsing changes, not the charts. Follow the same split
+  for any future panel that streams data.
+- **Electronic Load's wire format is settled (as of 2026-08-30) and its UI
+  deliberately has no chart at all** — this is a real hardware constraint,
+  not an unfinished placeholder. The firmware session confirmed this board
+  is genuinely open-loop on the current revision (bit-banged PWM into an
+  op-amp forcing current through a 10-ohm sense resistor, no ADC feedback
+  path), so there is no measured voltage/current to ever report. Command:
+  `SetCurrentLimitMa` = `payload[0]=0x01`, `payload[1..2]` = uint16 LE mA,
+  0-300 (`MAX_CURRENT_MA`; out of range → `PROTOCOL_ERR_BAD_VALUE`, wrong
+  length → `PROTOCOL_ERR_BAD_PAYLOAD_LEN`, same pattern as BlinkyLed).
+  Response is a 3-byte `[current_ma_lo, current_ma_hi, duty_percent]` — an
+  echo of the commanded current (not a measurement) plus the PWM duty cycle
+  firmware is actually driving. `ElectronicLoadViewModel` was originally
+  built with a placeholder 4-byte measured-voltage/measured-current payload
+  and a live dual-axis trend chart (mirroring the AccelTemp split above);
+  once the real Response shape landed, the firmware session explicitly
+  flagged that showing a "measured" chart here would be fabricating data no
+  real board of this revision can produce, and declined to redesign the UI
+  unilaterally. Given the choice (chart relabeled "commanded," replace with
+  commanded+duty readouts, or drop the chart entirely), **the user chose to
+  drop the chart entirely** — the panel now shows only the commanded
+  current and duty % as plain readouts (`CommandedCurrentMa`,
+  `DutyPercent`), with an explicit "values above are commanded, not
+  measured" note in the UI itself. `MockSerialService.BuildLoadTelemetry`
+  matches the 3-byte format and no longer fires on the periodic telemetry
+  timer (nothing changes there except in response to a command). The
+  current-to-duty calibration (I·R=V, V/VDD=duty, R=10Ω, VDD=3.3V nominal)
+  is explicitly first-pass per the firmware session — real hardware
+  verification is still pending there, so don't treat the exact constants
+  as final, only the wire format (command bytes in, 3-byte Response shape
+  out). **The `SetCurrentLimitMa` handler itself was compile+link verified
+  only until the same day** — a user report ("hit 100mA and apply, nothing
+  changes in the commanded portions") against real hardware turned out to
+  be exactly this: the app was working correctly (confirmed both in
+  Simulator mode and via a real Traffic Log capture showing
+  `PROTOCOL_ERR_NOT_IMPLEMENTED` coming back from the board), the bench
+  board just hadn't been reflashed yet with the build containing the real
+  handler. The firmware session has since flashed and verified that build
+  via STM32CubeProgrammer. **Still not user-retested against real
+  hardware as of this writing** — when it is, this note and the "real
+  hardware verification is still pending" line above should be updated
+  together. If a future "nothing happens" report comes in against real
+  hardware for any module, check the Traffic Log for an `Error` response
+  before assuming an app bug — no panel currently surfaces `MSG_ERROR` to
+  the UI, only the Traffic Log does, so a firmware-side rejection can look
+  identical to the app silently doing nothing.
 - Panels are populated dynamically from `PresenceReport`, not hardcoded. There
   will eventually be many more ProtoMod types than any given ProtoCore unit has
   slots for (currently three), so the app must never assume a fixed lineup.
@@ -249,9 +336,14 @@ needed to work on this app — this file has what's actually relevant here.
   `ModuleCatalog.TryCreate`, which maps a `ProtoModId` to its panel view model.
   A present `ProtoModId` this build has no panel for yet becomes an
   `UnknownModuleViewModel` (shown with an orange status dot) rather than
-  crashing or being silently dropped. If asked to add a new ProtoMod, the only
-  new-module-specific code goes in `ModuleCatalog` plus the panel itself —
-  `MainViewModel` and the XAML shouldn't need to change.
+  crashing or being silently dropped. Its message leads with the module's
+  circuit code from `ProtoModBoardCatalog` (e.g. "Unsupported module:
+  BasicLed (circuit code F02)") rather than the raw hex `ProtoModId` — the
+  hex value means nothing to a person, the circuit code is what's actually
+  printed/programmed on the physical board. Falls back to the hex ID only if
+  a type is genuinely uncataloged on this side too. If asked to add a new
+  ProtoMod, the only new-module-specific code goes in `ModuleCatalog` plus
+  the panel itself — `MainViewModel` and the XAML shouldn't need to change.
 - **Simulator mode** exists for developing/testing without hardware. `FrameDispatcher`
   talks to an `ISerialService` interface rather than `SerialService` directly, so it
   can point at either the real port or `MockSerialService` (swapped at runtime via
@@ -264,12 +356,35 @@ needed to work on this app — this file has what's actually relevant here.
   framing errors and disconnect events, capped at the last 500 entries. Useful first
   stop when something doesn't behave as expected against real hardware.
 - **Disconnect detection** — `SerialService` treats `IOException`,
-  `UnauthorizedAccessException`, and `InvalidOperationException` from the background
-  read loop or a `Send()` call as "the port just disappeared" (cable pulled, device
-  reset), tears itself down, and raises `Disconnected`. `FrameDispatcher` forwards
-  that to the UI thread and also swallows those same exception types out of `Send()`
-  so a mid-command drop can't crash the UI thread from a button click. The UI's
-  response is identical to a manual Disconnect: slots reset to empty.
+  `UnauthorizedAccessException`, `InvalidOperationException`, and (as of
+  2026-08-30) `TimeoutException` from the background read loop or a `Send()`
+  call as "the port just disappeared" (cable pulled, device reset), tears
+  itself down, and raises `Disconnected`. `FrameDispatcher` forwards that to
+  the UI thread and also swallows those same exception types out of `Send()`
+  so a mid-command drop can't crash the UI thread from a button click. The
+  UI's response is identical to a manual Disconnect: slots reset to empty.
+  **`ReadTimeout`/`WriteTimeout` are explicitly bounded at 1000ms** (`SerialPort`
+  otherwise defaults to infinite) — added after a real user report that
+  re-inserting a ProtoMod board can brown out ProtoCore's supply and force a
+  full MCU reset (confirmed via firmware's own `RCC_CSR` boot diagnostics:
+  `POR/PDR`, a genuine hardware/connector issue, not fixable in software),
+  and `Send()` runs synchronously on the UI thread — an unbounded hang on a
+  dead handle there freezes the whole app, not just one command. **Not yet
+  confirmed against a real reproduction** — `MockSerialService` doesn't touch
+  `SerialPort`, so this can only be regression-tested (normal flow still
+  works), not exercised against a genuinely hung OS handle. The firmware
+  session can reproduce the real reset on demand via ST-Link; that's the
+  next step to actually confirm this fixes the freeze rather than just
+  being a plausible mechanism. See CHANGELOG entry 32. **Tried, didn't
+  reproduce it (entry 33):** an ST-Link-triggered NRST reset leaves the COM
+  port continuously present with zero flicker (polled at 500ms resolution)
+  and logs nothing in the System event log — it disturbs the MCU core but
+  not VBUS/the USB link enough for Windows to notice. The real event
+  (`POR/PDR`, a supply brownout from physical board insertion) can't be
+  triggered over SWD; there's no remaining synthetic-repro path on either
+  side. Don't re-attempt an SWD/NRST-based repro — this needs the user to
+  watch a real reinsertion happen live, which is also the only way to learn
+  whether Windows keeps the same COM port number across the reset.
 - **Help tab** — lives in the same collapsed-by-default bottom `Expander` as the
   Traffic Log (they're now two `TabItem`s of one `TabControl` there, not two
   separate Expanders). `HelpViewModel.RevisionNotes` is a hand-maintained,
@@ -280,6 +395,32 @@ needed to work on this app — this file has what's actually relevant here.
   `HelpViewModel.SupportedModules` reads straight from `ModuleCatalog.SupportedModules`
   — don't hand-maintain a second "what's supported" list anywhere; if a new ProtoMod
   panel gets registered in `ModuleCatalog`, this list picks it up automatically.
+- **App icon.** `Assets/AppIcon.ico` (multi-res, 16/32/48/256px) is built from the
+  real ProtoVerse logo (`PROTOVERSE/logo.jpg`, background chroma-keyed out) —
+  set via `<ApplicationIcon>` in the `.csproj` (the `.exe`/taskbar/Explorer
+  icon) and `Window.Icon` in `MainWindow.xaml` (the title bar/Alt-Tab icon).
+  `Assets/logo_transparent_master.png` is the cropped/centered transparent
+  source, kept for re-exporting at a different size later without redoing the
+  background removal. If the logo ever changes, regenerate both from a fresh
+  export of the real logo, not by hand-editing the `.ico`.
+  **Settled sizing/weight, after live-testing several alternatives against
+  the real taskbar (2026-08-30, CHANGELOG entry 35):** original (undilated)
+  stroke weight - a thickened version closes the visual-weight gap against
+  solid-fill icons like VS Code/Excel but collapses into an unrecognizable
+  blob at 16/32px once pushed far enough to actually look "bold," not worth
+  it. Zero-margin "contain" fit - the mark's longer dimension (width, source
+  is a wide/short 1.6:1 shape) fills the canvas edge to edge, the shorter
+  dimension is letterboxed - is the largest this specific mark can be
+  without clipping the orbit ring's curled tail tips; a version that also
+  filled the shorter dimension necessarily clipped those tails and was
+  rejected once shown. Don't re-litigate either without a reason to.
+- **A direct small-region `Graphics.CopyFromScreen` of the taskbar
+  intermittently returns a blank white image on this machine** (Windows 11) -
+  likely a DWM/hardware-overlay quirk with partial `BitBlt` capture of the
+  modern taskbar. Capturing the full desktop and cropping the target region
+  out of that bitmap in memory worked reliably every time. Prefer that
+  approach for any future taskbar screenshot verification rather than a
+  direct small-region capture.
 
 ## Gotchas already hit (save yourself the loop)
 
@@ -325,6 +466,23 @@ needed to work on this app — this file has what's actually relevant here.
   (plus `x:Name="PART_SelectedContentHost"` for convention) — confirmed working.
   If retemplating `TabControl` again, don't reach for `ContentSource` first;
   start with the explicit binding.
+- **Windows caches the taskbar icon per file path and doesn't reliably
+  invalidate it on rebuild.** After adding `Assets/AppIcon.ico`, a taskbar
+  screenshot of the running app still showed the old generic icon even
+  though the `.exe` was freshly rebuilt with the icon correctly embedded
+  (confirmed via `Icon.ExtractAssociatedIcon` reading the file directly,
+  bypassing the shell cache). This is expected after rebuilding the same
+  `.exe` path repeatedly during a dev session — not a bug, and not something
+  the app can fix. If an icon change doesn't show up in the taskbar, check
+  the title bar first (a live render, not cached) or extract the icon
+  directly from the file before assuming the embed failed. **Confirmed fix**
+  (2026-08-30, this exact scenario): delete
+  `%LocalAppData%\IconCache.db` and
+  `%LocalAppData%\Microsoft\Windows\Explorer\iconcache_*.db`/
+  `thumbcache_*.db`, then restart `explorer.exe` (`Stop-Process -Name
+  explorer -Force` followed by `Start-Process explorer.exe`) — relaunching
+  the app afterward showed the correct icon in the taskbar. A full reboot
+  isn't actually necessary, just an Explorer restart.
 - `System.IO.Ports` (for `SerialPort`) needs an **explicit** `PackageReference`
   in the `.csproj` even on `net8.0-windows` — it's not included implicitly.
   Already added; don't remove it.

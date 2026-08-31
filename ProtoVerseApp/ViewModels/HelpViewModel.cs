@@ -26,6 +26,7 @@ namespace ProtoVerseApp.ViewModels
         /// they see or can do does.</summary>
         public IReadOnlyList<string> RevisionNotes { get; } = new[]
         {
+            "Added a real ProtoVerse app icon (taskbar, title bar, Alt-Tab) instead of the generic default.",
             "Corrected the Accel+Temp ProtoMod's expected circuit code from F02 to E03, per the module's product manual.",
             "Supported ProtoMods now show their expected EEPROM circuit code alongside their name.",
             "Redesigned the accelerometer display into an X/Y tilt plot and a Z-axis fill gauge centered on -1g.",

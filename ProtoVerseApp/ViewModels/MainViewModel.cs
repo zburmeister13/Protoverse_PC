@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -91,7 +94,23 @@ namespace ProtoVerseApp.ViewModels
                 return;
 
             var portName = SimulatorMode ? "SIMULATOR" : SelectedPort!;
-            _dispatcher.Connect(portName);
+
+            try
+            {
+                _dispatcher.Connect(portName);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                // A real, expected failure mode - e.g. the port's underlying USB device
+                // is in a broken state (a flaky USB CDC driver, the board resetting
+                // mid-open), or another program already has the port open. Not a bug -
+                // show it as a normal failed-connect status instead of letting it
+                // become an unhandled-exception dialog for something this routine.
+                IsConnected = false;
+                StatusMessage = $"Failed to connect to {(SimulatorMode ? "Simulator" : SelectedPort)}: {ex.Message}";
+                return;
+            }
+
             IsConnected = _dispatcher.IsConnected;
 
             if (IsConnected)
@@ -168,34 +187,65 @@ namespace ProtoVerseApp.ViewModels
                 return;
             }
 
-            DetachModulePanels();
-            Panels.Clear();
-
+            // A hot-swap on the real board fires this handler at any moment, so it
+            // must never be able to take the whole app down or leave the UI in a
+            // half-rebuilt state. Two layers of isolation:
+            //  1. Build the new slot lineup in a local list first, and only replace
+            //     the live Panels collection once the whole new lineup is ready - if
+            //     something below throws in a way that isn't already caught per-slot,
+            //     the currently-displayed (working) panels are never touched.
+            //  2. Construct each slot's panel inside its own try/catch, so one
+            //     misbehaving ProtoMod type (e.g. a bug in a newly-added panel's
+            //     constructor) degrades just that slot to "Unsupported" instead of
+            //     losing the whole report - the other slots still update normally.
+            var newPanels = new List<object>(SlotCount);
+            var slotErrors = new List<string>();
             int detectedCount = 0;
+
             for (int slot = 0; slot < SlotCount; slot++)
             {
                 var moduleId = (ProtoModId)(ushort)(frame.Payload[slot * 2] | (frame.Payload[slot * 2 + 1] << 8));
                 if (moduleId == ProtoModId.None)
                 {
-                    Panels.Add(new EmptySlotViewModel());
+                    newPanels.Add(new EmptySlotViewModel());
+                    continue;
                 }
-                else
+
+                detectedCount++;
+                try
                 {
-                    detectedCount++;
-                    Panels.Add(ModuleCatalog.TryCreate(moduleId, _dispatcher) ?? (object)new UnknownModuleViewModel(moduleId));
+                    newPanels.Add(ModuleCatalog.TryCreate(moduleId, _dispatcher) ?? (object)new UnknownModuleViewModel(moduleId));
+                }
+                catch (Exception ex)
+                {
+                    newPanels.Add(new UnknownModuleViewModel(moduleId));
+                    slotErrors.Add($"slot {slot} ({moduleId}): {ex.GetType().Name}");
                 }
             }
 
-            StatusMessage = $"{detectedCount} ProtoMod(s) detected";
+            DetachModulePanels();
+            Panels.Clear();
+            foreach (var panel in newPanels)
+                Panels.Add(panel);
+
+            StatusMessage = slotErrors.Count == 0
+                ? $"{detectedCount} ProtoMod(s) detected"
+                : $"{detectedCount} ProtoMod(s) detected - panel error in {string.Join(", ", slotErrors)}";
         }
 
         /// <summary>Unsubscribes every currently-displayed module panel from the
         /// dispatcher before it's discarded, so a slot that's about to be reassigned
-        /// (or emptied) doesn't leave a dead view model still processing frames.</summary>
+        /// (or emptied) doesn't leave a dead view model still processing frames.
+        /// Best-effort per panel - one panel's Detach() misbehaving (e.g. a future
+        /// panel type with a buggy cleanup path) must not stop the rest from being
+        /// detached or block a hot-swap rebuild from completing.</summary>
         private void DetachModulePanels()
         {
             foreach (var module in Panels.OfType<ModulePanelViewModelBase>())
-                module.Detach();
+            {
+                try { module.Detach(); }
+                catch { /* best-effort cleanup, see doc comment above */ }
+            }
         }
 
         private void ResetSlotsToEmpty()

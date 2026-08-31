@@ -7,6 +7,9 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>ProtoVerseApp</RootNamespace>
     <AssemblyName>ProtoVerseApp</AssemblyName>
+    <!-- .exe/taskbar/Explorer icon. Window.Icon (MainWindow.xaml) covers the title
+         bar/Alt-Tab icon separately - both point at the same file. -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +19,10 @@
     <!-- Live trend-line charts for telemetry panels (Accel+Temp, Electronic Load). -->
     <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\AppIcon.ico" />
   </ItemGroup>
 
 </Project>

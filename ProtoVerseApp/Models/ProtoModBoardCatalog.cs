@@ -39,6 +39,18 @@ namespace ProtoVerseApp.Models
     /// `BoardID_ReadParsed()` are both non-destructive and already implemented
     /// firmware-side, so that read is trivial once real Sensors-1 hardware is on the
     /// bench, and would be the final word if this is ever in doubt again.
+    ///
+    /// FULLY CLOSED 2026-08-30 with real hardware evidence (a raw-serial capture, not
+    /// documentation this time): the physical board that started the AccelTemp/"F02"
+    /// confusion above was never an AccelTemp unit at all - it's a real board with a
+    /// valid EEPROM that simply wasn't in firmware's catalog yet, so it was reporting
+    /// as <see cref="ProtoModId.None"/> (indistinguishable from an empty slot).
+    /// Firmware added <see cref="ProtoModId.Unknown"/> (0xFFE0) for exactly this
+    /// "present but unrecognized" case, plus the actual missing catalog entry:
+    /// <see cref="ProtoModId.BasicLed"/> (0x0004, circuit code "F02") - which, fittingly,
+    /// is exactly the Simple LED board the manuals said "F02" was, confirming that
+    /// reading was right all along; it just needed its own catalog entry rather than
+    /// being confused with AccelTemp's.
     /// </summary>
     public static class ProtoModBoardCatalog
     {
@@ -47,6 +59,7 @@ namespace ProtoVerseApp.Models
             new ProtoModBoardIdentity(ProtoModId.BlinkyLed, "F01", "R1", "R1"),
             new ProtoModBoardIdentity(ProtoModId.AccelTemp, "E03", "R1", "R1"),
             new ProtoModBoardIdentity(ProtoModId.ElectronicLoad, "E05", "R1", "R1"),
+            new ProtoModBoardIdentity(ProtoModId.BasicLed, "F02", "R1", "R1"),
         };
     }
 }

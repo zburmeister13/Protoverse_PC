@@ -24,7 +24,24 @@ namespace ProtoVerseApp.Models
         AccelTemp = 0x0002,
         ElectronicLoad = 0x0003,
 
-        // 0x0004..0xFFEF reserved for the ProtoMod catalog.
+        /// <summary>Simple LED (Fundamentals series, circuit code "F02") - two LED
+        /// paths with voltage/resistor selector switches, no MCU control. Firmware
+        /// only identifies this board so far (empty tick/handle_command stub); this
+        /// app has no panel for it yet either, so it renders via the existing
+        /// recognized-but-unsupported <see cref="UnknownModuleViewModel"/> path.</summary>
+        BasicLed = 0x0004,
+
+        // 0x0005..0xFFDF reserved for the rest of the ProtoMod catalog.
+
+        /// <summary>A slot ProtoCore itself can't identify - its EEPROM read was
+        /// valid/plausible but didn't match any entry in firmware's own catalog, so
+        /// firmware reports this instead of <see cref="None"/> (which would be
+        /// indistinguishable from an empty slot). This is a different situation from
+        /// a real, firmware-known <see cref="ProtoModId"/> this app just has no panel
+        /// for - see the distinct messaging in <see cref="UnknownModuleViewModel"/>.
+        /// Added 2026-08-30 after exactly that ambiguity caused real confusion
+        /// troubleshooting a physical board.</summary>
+        Unknown = 0xFFE0,
 
         /// <summary>Addresses ProtoCore itself (not a ProtoMod) - used for slot
         /// identification requests/reports.</summary>

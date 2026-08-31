@@ -43,9 +43,38 @@ namespace ProtoVerseApp.Services
         {
             Disconnect();
 
-            _port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
-            _port.DataReceived += OnDataReceived;
-            _port.Open();
+            var port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One);
+
+            // Bounded, not SerialPort's default of infinite. Without this, a Read/Write
+            // against a handle that's gone but hasn't been torn down cleanly by the OS
+            // yet (observed for real: a ProtoMod re-insertion browning out ProtoCore's
+            // supply and forcing a full MCU reset, not just a clean cable-pull) can block
+            // the calling thread forever instead of throwing - and Send() runs
+            // synchronously on the UI thread via FrameDispatcher, so that hang freezes
+            // the whole app rather than just failing one command. 1s is generous for a
+            // real frame (max 250 bytes at 115200 baud takes low tens of ms) while still
+            // recovering promptly from a genuinely dead port.
+            port.ReadTimeout = 1000;
+            port.WriteTimeout = 1000;
+
+            try
+            {
+                port.DataReceived += OnDataReceived;
+                port.Open();
+            }
+            catch
+            {
+                // Open() can genuinely fail - a busy port, a flaky USB CDC driver, the
+                // board resetting mid-open, etc. Don't leave a half-opened port sitting
+                // in _port for a later call to trip over; let the caller decide how to
+                // report this (MainViewModel turns it into a status message rather than
+                // an unhandled-exception dialog).
+                port.DataReceived -= OnDataReceived;
+                port.Dispose();
+                throw;
+            }
+
+            _port = port;
         }
 
         public void Disconnect()
@@ -100,7 +129,7 @@ namespace ProtoVerseApp.Services
         }
 
         private static bool IsDisconnectException(Exception ex) =>
-            ex is IOException or UnauthorizedAccessException or InvalidOperationException;
+            ex is IOException or UnauthorizedAccessException or InvalidOperationException or TimeoutException;
 
         /// <summary>Tears the port down the same way Disconnect() does, then tells
         /// upstream listeners this wasn't a deliberate disconnect.</summary>

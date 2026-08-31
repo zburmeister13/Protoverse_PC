@@ -10,9 +10,10 @@ namespace ProtoVerseApp.Services
     /// Fake transport that stands in for a real ProtoCore connection so the UI can be
     /// built and exercised without hardware plugged in. "Connects" instantly, reports
     /// a fixed set of ProtoMods present, and generates plausible command responses and
-    /// periodic telemetry for the modules that stream data (Accel+Temp, Electronic
-    /// Load) - values are synthetic (sine/cosine + jitter), not meant to be accurate,
-    /// just enough to see the UI move.
+    /// periodic telemetry for the module that streams data (Accel+Temp) - values are
+    /// synthetic (sine/cosine + jitter), not meant to be accurate, just enough to see
+    /// the UI move. Electronic Load is response-only (no ADC feedback on real
+    /// hardware, so nothing to stream) - see BuildLoadTelemetry.
     /// </summary>
     public class MockSerialService : ISerialService
     {
@@ -163,7 +164,6 @@ namespace ProtoVerseApp.Services
 
             _elapsedSeconds += 1.0;
             FrameReceived?.Invoke(BuildAccelTempTelemetry());
-            FrameReceived?.Invoke(BuildLoadTelemetry());
         }
 
         private ProtocolFrame BuildAccelTempTelemetry()
@@ -181,14 +181,24 @@ namespace ProtoVerseApp.Services
             return new ProtocolFrame(ProtoModId.AccelTemp, MsgType.StreamData, payload);
         }
 
+        /// <summary>Matches the real 3-byte Response firmware now sends for
+        /// SetCurrentLimitMa: an echo of the commanded current (this board has no
+        /// ADC feedback, so there's no measured value to report) plus the PWM duty
+        /// cycle firmware computed for it. Duty here uses the same first-pass
+        /// calibration firmware described (I*R=V, V/VDD=duty, R=10ohm, VDD=3.3V
+        /// nominal) - not settled, real hardware verification is still pending on
+        /// the firmware side, so treat this as illustrative only.</summary>
         private ProtocolFrame BuildLoadTelemetry()
         {
-            ushort voltageMv = (ushort)Math.Max(0, 5000 - _currentLimitMa * 2 + _rng.Next(-20, 20));
-            ushort currentMa = (ushort)Math.Max(0, _currentLimitMa + _rng.Next(-2, 2));
+            const double senseResistorOhms = 10.0;
+            const double supplyVoltage = 3.3;
 
-            var payload = new byte[4];
-            WriteUInt16LE(payload, 0, voltageMv);
-            WriteUInt16LE(payload, 2, currentMa);
+            double voltage = (_currentLimitMa / 1000.0) * senseResistorOhms;
+            byte dutyPercent = (byte)Math.Clamp(voltage / supplyVoltage * 100.0, 0, 100);
+
+            var payload = new byte[3];
+            WriteUInt16LE(payload, 0, (ushort)_currentLimitMa);
+            payload[2] = dutyPercent;
             return new ProtocolFrame(ProtoModId.ElectronicLoad, MsgType.Response, payload);
         }
 

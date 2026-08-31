@@ -1,9 +1,5 @@
-using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using OxyPlot;
-using OxyPlot.Series;
-using ProtoVerseApp.Charts;
 using ProtoVerseApp.Models;
 using ProtoVerseApp.Services;
 
@@ -12,53 +8,34 @@ namespace ProtoVerseApp.ViewModels
     /// <summary>
     /// Panel for the Electronic Load ProtoMod.
     ///
-    /// TODO: SetCurrentLimit's payload and the telemetry layout in OnFrameReceived
-    /// are placeholders - replace once this module's real command set is defined.
-    ///
-    /// The trend-line chart is deliberately decoupled from that parsing, same as
-    /// AccelTempViewModel: OnFrameReceived turns raw bytes into MeasuredVoltage/
-    /// MeasuredCurrentMa, and AppendToChart (below) just plots whatever those
-    /// properties currently hold. Only the parsing needs to change once the real
-    /// payload format lands.
+    /// This board is genuinely open-loop on the current hardware revision - a
+    /// bit-banged PWM low-passed into an op-amp that forces a set current through
+    /// a 10-ohm sense resistor, with no ADC feedback path to firmware at all.
+    /// There is no measured voltage/current to show, ever, on this revision, so
+    /// (per the firmware session and a user decision made when this was flagged)
+    /// this panel deliberately has no live chart and no "measured" readouts -
+    /// showing fabricated telemetry would be actively misleading for a teaching
+    /// tool. It only shows what the device actually reports: the commanded
+    /// current echoed back, and the PWM duty cycle firmware is driving.
     /// </summary>
     public partial class ElectronicLoadViewModel : ModulePanelViewModelBase
     {
         private const byte CmdSetCurrentLimitMa = 0x01;
 
-        /// <summary>~2 minutes of history at roughly 1 sample/sec - see
-        /// AccelTempViewModel.MaxHistoryPoints for the same reasoning.</summary>
-        private const int MaxHistoryPoints = 120;
-
         public override ProtoModId ModuleId => ProtoModId.ElectronicLoad;
         public override string DisplayName => "Electronic Load";
 
         [ObservableProperty]
-        private double _measuredVoltage;
+        private int _commandedCurrentMa;
 
         [ObservableProperty]
-        private double _measuredCurrentMa;
+        private int _dutyPercent;
 
         [ObservableProperty]
         private int _currentLimitMa = 100;
 
-        /// <summary>Voltage and current plotted on independent axes (left/right) since
-        /// they're on very different scales (~0-5 V vs. hundreds of mA) - a shared
-        /// axis would flatten one of them to near-invisible.</summary>
-        public PlotModel PlotModel { get; } = ChartTheme.CreateDualAxisPlotModel("Voltage (V)", "Current (mA)");
-
-        private readonly LineSeries _voltageSeries;
-        private readonly LineSeries _currentSeries;
-        private readonly DateTime _startTime = DateTime.UtcNow;
-
         public ElectronicLoadViewModel(FrameDispatcher dispatcher) : base(dispatcher)
         {
-            _voltageSeries = ChartTheme.AddLineSeries(PlotModel, ChartTheme.AccentBlue, "Voltage");
-            _voltageSeries.YAxisKey = ChartTheme.LeftAxisKey;
-
-            _currentSeries = ChartTheme.AddLineSeries(PlotModel, ChartTheme.AccentOrange, "Current");
-            _currentSeries.YAxisKey = ChartTheme.RightAxisKey;
-
-            ChartTheme.EnableLegend(PlotModel);
         }
 
         [RelayCommand]
@@ -70,27 +47,16 @@ namespace ProtoVerseApp.ViewModels
 
         protected override void OnFrameReceived(ProtocolFrame frame)
         {
-            if (frame.Type != MsgType.Response && frame.Type != MsgType.StreamData)
+            if (frame.Type != MsgType.Response)
                 return;
 
-            // Placeholder layout: [voltage_mV (uint16 LE)] [current_mA (uint16 LE)]
-            if (frame.Payload.Length < 4)
+            // [current_ma_lo, current_ma_hi, duty_percent] - current_ma is an echo
+            // of what was just commanded, not a measurement (see class doc comment).
+            if (frame.Payload.Length < 3)
                 return;
 
-            MeasuredVoltage = ReadUInt16LE(frame.Payload, 0) / 1000.0;
-            MeasuredCurrentMa = ReadUInt16LE(frame.Payload, 2);
-
-            AppendToChart();
-        }
-
-        private void AppendToChart()
-        {
-            double elapsed = (DateTime.UtcNow - _startTime).TotalSeconds;
-
-            ChartTheme.AppendPoint(_voltageSeries, elapsed, MeasuredVoltage, MaxHistoryPoints);
-            ChartTheme.AppendPoint(_currentSeries, elapsed, MeasuredCurrentMa, MaxHistoryPoints);
-
-            PlotModel.InvalidatePlot(true);
+            CommandedCurrentMa = ReadUInt16LE(frame.Payload, 0);
+            DutyPercent = frame.Payload[2];
         }
 
         private static ushort ReadUInt16LE(byte[] data, int offset) =>
