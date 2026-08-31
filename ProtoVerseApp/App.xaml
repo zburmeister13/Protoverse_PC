@@ -6,6 +6,8 @@
     <Application.Resources>
         <conv:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
         <conv:SlotStateToBrushConverter x:Key="SlotStateToBrushConverter"/>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
 
         <!--
             ProtoVerse brand palette. Background/surface ramp is near-black (swapped
@@ -203,6 +205,44 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!--
+            Top-level tabs (Slots / Library) in MainWindow's main content area. Same
+            look as the implicit TabControl style above, with one deliberate
+            difference: the content row is Height="*" instead of "Auto".
+
+            The implicit style MUST stay Auto because it's used inside an Expander,
+            which imposes no bounded height - a star row there measures to zero and the
+            tab content silently vanishes (see the gotcha in CLAUDE.md). This style is
+            only ever applied to a TabControl sitting in a Grid row that IS bounded
+            (MainWindow's Height="*" content row), where the opposite is true: Auto
+            would let a long list overflow past the row instead of scrolling inside it.
+            Two different parents, two different correct answers - hence two styles
+            rather than changing the shared one.
+        -->
+        <Style x:Key="MainTabControlStyle" TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TabPanel Grid.Row="0" IsItemsHost="True" Background="Transparent"/>
+                            <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                    CornerRadius="0,4,4,4" Padding="8">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                   Content="{TemplateBinding SelectedContent}"
+                                                   ContentTemplate="{TemplateBinding SelectedContentTemplate}"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style TargetType="TabItem">
             <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>

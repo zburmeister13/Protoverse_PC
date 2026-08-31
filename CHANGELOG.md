@@ -1761,3 +1761,415 @@ source alone.
   confirm the calibration fix, and in catching a tooling bug in the
   process of investigating what turned out to be a second tooling bug
   rather than a second firmware one.
+
+---
+
+### 43. New Library tab: the full ProtoMod catalog as a discovery surface, built only from real source material
+
+**2026-08-31, 17:15 CDT**
+
+**Prompt:** create a new "Library" tab showing the full ProtoMod catalog
+(not just what's connected), hardcoded for v1 but structured to move to a
+JSON/manifest source later. Each entry needs name + code, series and
+difficulty, a one-sentence description, a brief schematic, 2-3
+creative-challenge-style ideas, owned vs. not-owned state driven by whatever
+the app already uses to detect connected panels, and "next step" links to
+related modules. Explicitly framed as a marketing/discovery surface -
+not-owned modules should look inviting rather than locked. Hard constraint
+repeated several times in the prompt: **no fabricated content** - only
+modules and details that actually exist in this codebase or its manual docs,
+with anything unbacked marked as TODO/missing in the UI rather than filled
+with plausible filler, and progression links only where real evidence
+supports them. Also: create and switch to branch `feature/protomod-library`
+first, and don't touch the wire protocol, `FrameInterpreter`, or any module
+control logic.
+
+**Purpose:** Give the app a place that answers "what else is there?" rather
+than only "what's plugged in right now" - and do it without inventing a
+product catalog, which for a hardware education product would be actively
+harmful (a fabricated module description is a promise the hardware can't
+keep).
+
+**Source material gathered first, before writing any content.** Extracted
+the text of every module manual in `PROTOVERSE/Manuals/` by unzipping each
+`.docx` and stripping the XML, and enumerated the KiCad schematic exports in
+`PROTOVERSE/Finished Modules/`. That produced six real boards - F01 Blinky,
+F02 Simple LED, E03 Sensors 1, E05 Electronic Load, A01 Direct Digital
+Synthesis, F00 Headers - and is the entire basis for the catalog. No seventh
+module was added, including the "Logic ProtoMod" that the F01 manual's own
+next-step text mentions: it has no board, no manual, and no `ProtoModId`, so
+inventing a card for it would be exactly the fabrication the prompt ruled
+out.
+
+**Changes:**
+- `Models/ProtoModLibraryCatalog.cs` (new) - flat, JSON-friendly records
+  (`ProtoModCatalogEntry`, `ProtoModIdea`, `ProtoModNextStep`) plus the
+  hardcoded six-entry catalog. Every content field is paired with a
+  `*Source` field naming the document and section it was quoted from, and
+  every field with no source material is `null`. A long file comment records
+  the sources used, the "don't fill a null with something that sounds right"
+  rule, and the intended migration to a manifest shared with the manual docs.
+- `ViewModels/LibraryViewModel.cs` (new) - `LibraryEntryViewModel` turns each
+  null into its "...coming soon" string; `NextStepLinkViewModel` carries the
+  evidence sentence through to a tooltip so a person can see *why* the app
+  claims one module leads into another. `UpdateInstalled`/`ClearInstalled`
+  are the only mutable state.
+- `Views/LibraryPanel.xaml` / `.xaml.cs` (new) - a `ListBox` with a
+  `WrapPanel` items panel (two columns of 385px cards at the default window
+  width - measured, see below). Selection chrome is stripped from
+  `ListBoxItem`; selection is expressed as an orange highlight ring on the
+  card itself, and the code-behind's one job is `ScrollIntoView` on selection
+  change, which is what makes a "leads into" link scroll to its target.
+- `Converters/BoolToVisibilityConverters.cs` (new) - `BoolToVisibility` and
+  its inverse, registered in `App.xaml` (not a view's own resources - see the
+  converter-scope gotcha in `CLAUDE.md`).
+- `App.xaml` - registered the two converters, and added a **keyed**
+  `MainTabControlStyle` for the new top-level tabs. It is a copy of the
+  implicit `TabControl` style with the content row changed from `Height="Auto"`
+  to `Height="*"`. The implicit style must stay `Auto` because it's used
+  inside an `Expander` with no bounded height, where a star row measures to
+  zero and the content silently vanishes (a gotcha this project already hit);
+  the new style is only applied where the parent row *is* bounded, where the
+  opposite is true. Two parents, two correct answers - hence two styles
+  rather than changing the shared one.
+- `Views/MainWindow.xaml` - the main content row is now a two-tab
+  `TabControl`: **Slots** (the existing stacked panels, moved verbatim into a
+  `TabItem`) and **Library**. Chose a top-level tab over a third tab in the
+  bottom Traffic Log/Help drawer because that drawer is collapsed by default
+  and fixed at 220px - fine for a diagnostic log, wrong for a surface whose
+  whole job is to be browsed.
+- `ViewModels/MainViewModel.cs` - added a `Library` property and two calls:
+  `Library.UpdateInstalled(detectedIds)` after a `PresenceReport` rebuild, and
+  `Library.ClearInstalled()` in `ResetSlotsToEmpty`. Ownership is derived from
+  the same per-slot `ProtoModId` values the panels are built from, so the two
+  can't drift. Disconnect clears to "connect to see what's in your kit" rather
+  than marking everything not-owned - "we don't know" and "you don't own it"
+  are different claims. The build-then-swap and per-slot try/catch structure
+  of `OnFrameReceived` is untouched.
+- `ViewModels/HelpViewModel.cs`, `README.md` - a user-facing revision note,
+  and a README section covering the tab, the deliberate v1 hardcoding, and
+  the two inferred fields flagged below.
+- **Not touched, per the prompt:** the wire protocol, `FrameInterpreter`, and
+  every panel/module view model.
+
+**What's backed by real sources vs. marked missing.** Manual-quoted:
+descriptions (each module's "Core Concept" line), schematic summaries (F01's
+Appendix C, F02/E03/A01's Overview and Background sections), and all ideas.
+F01's three ideas come from its Gen2 manual's actual **Creative Challenge**
+section; F02/E03/A01 have no such section, so their ideas are quoted from
+their manuals' "Now try this" experiments and each idea's source label says
+so explicitly. E05 has no manual at all - its description and schematic
+summary come from this repo's own `CLAUDE.md`, and its ideas are genuinely
+empty ("Project ideas... coming soon"). F00 Headers has hardware and a
+schematic PDF and nothing else written about it anywhere, so every content
+field is null and its card is almost entirely "coming soon" - included
+because it's a real board, not excluded because its card looks sparse.
+Difficulty and time estimate exist **only** for F01 (the one manual written
+against the newer template that has those fields); every other card reads
+"Difficulty not yet rated". No schematic *drawing* is bundled for any board -
+only KiCad PDF exports exist, outside this repo - so every card shows a
+placeholder tile referencing the real PDF rather than a fake thumbnail.
+Exactly one "leads into" link exists in the whole catalog (F01 -> F02), quoted
+from the Blinky manual's "Future ProtoMods for you" section.
+
+**Two judgment calls worth reviewing:**
+1. **Series for the two manual-less boards is inferred**, not quoted - E05 is
+   listed as Explorers and F00 as Fundamentals on the strength of the
+   circuit-code letter pairing that every existing manual follows (F =
+   Fundamentals, E = Explorers, A = Advanced). Consistent, but never written
+   down as a rule anywhere. Flagged in both the source file and README.
+2. **The two F01 manuals disagree** and the newer one was used throughout.
+   `Manuals/F01_Blinky.docx` titles the board "Blink", calls the series
+   "Foundations", and describes F02 as "the Switch ProtoMod";
+   `Manuals/Gen2/Blinky_F01_Manual.docx` titles it "Blinky", says
+   "Fundamentals Series", and describes F02 as "Simple LED" - which is what
+   F02's own manual calls it. Everything F01 contributes to the catalog comes
+   from the Gen2 manual, on the grounds that it's the one that agrees with
+   the rest of the docs. If the older manual is actually the current one,
+   F01's card needs revisiting.
+
+**Verification.** Built clean (only the two pre-existing `MockSerialService`
+warnings). Drove the running app via UI Automation in Simulator mode:
+connected, switched to the Library tab, and dumped every text element and
+button - all six cards render with the exact quoted content, the header reads
+"3 of 6 ProtoMods in this catalog are plugged into your ProtoCore right now",
+and ownership badges are correct (F01/E03/E05 "In your kit"; F02, A01, F00
+"Not yet in your kit" - F02 correctly *not* owned in the simulator, which
+reports Blinky/AccelTemp/ElectronicLoad). Invoking the F01 card's
+"Simple LED (F02)" link selected the F02 card and scrolled it to the top of
+the viewport (verified via the list items' bounding rectangles before and
+after). Card width was 410px initially, which measured 422px per card against
+an 834px list - 10px too wide for two columns, so every card wrapped to its
+own row; reduced to 385 and re-measured, confirming pairs now share a row at
+x=216 and x=613.
+
+**Not verified: the visual appearance.** Screenshot capture returned a blank
+white client area for the *entire* app window - including the untouched Slots
+tab and the brand header - under both a full-desktop `CopyFromScreen` crop
+(the workaround `CLAUDE.md` recommends for taskbar capture) and
+`PrintWindow` with `PW_RENDERFULLCONTENT`. The title bar captured correctly
+in both, and other windows on the desktop captured fine, so this is a capture
+problem specific to this app's WPF client area in this environment, not a
+rendering failure introduced here - the UI Automation tree reports every
+element with sane, non-zero bounding rectangles laid out inside the window.
+Colors, spacing, and contrast on the new cards therefore have **not** been
+seen by anyone yet and are the one thing worth eyeballing before this
+branch merges.
+
+---
+
+### 44. Library family filter (F/E/A), and the series-inference caveat resolved
+
+**2026-08-31, 17:40 CDT**
+
+**Prompt:** "There will be three general families of protomods, Fundamentals
+(F circuit codes), Explorer (E circuit codes), and Advanced (A circuit
+codes) - use this information to allow for filtering of boards in the GUI."
+(The same message also raised a ProtoCore-side "remember every ProtoMod ever
+seen" idea and asked for thoughts - that's discussion, not implemented here,
+and nothing about the wire protocol was touched.)
+
+**Purpose:** Two things at once. Practically, give the Library a family
+filter. More importantly, this **resolves judgment call #1 from entry 43**:
+that entry flagged the series of the two manual-less boards (E05, F00) as an
+inference, since every manual states its own series in prose but no document
+had ever written down the letter-to-family rule. The user has now confirmed
+the rule directly, so it is a real product fact rather than a guess, and a
+board with no manual can be given a correct family.
+
+**Changes:**
+- `Models/ProtoModLibraryCatalog.cs` - rewrote the `ProtoModSeries` doc
+  comment to state the confirmed F/E/A rule and to mark it explicitly as the
+  *one* field in this catalog that may be derived rather than quoted; the
+  no-fabrication rule still covers descriptions, ideas, schematics, and
+  progressions. Removed the "this is an inference, see README" caveats from
+  the E05 and F00 entries.
+- `ViewModels/LibraryViewModel.cs` - added `SeriesFilterViewModel` (one filter
+  button; `Series` is null for "All") and, on the library, a `SeriesFilters`
+  list plus an `EntriesView` `ListCollectionView`. The grid now binds to the
+  view rather than to `Entries` directly, so filtering never disturbs card
+  state - the cards are the same objects either way, they're just shown or
+  not. Counts are baked in at construction since the catalog is static.
+- `SelectByCode` now clears the filter when the target is in a different
+  family than the active one. Nothing says a Fundamentals board can't lead
+  into an Explorers one, and without this a cross-family "leads into" link
+  would select and highlight a card that had been filtered out of view.
+  Following a link is an explicit request to go look at that module, so it
+  wins over the filter.
+- `Views/LibraryPanel.xaml` - filter row above the grid. A flat row of
+  buttons rather than a dropdown: with only three families plus All, every
+  option is visible at once and one click away. **Gotcha worth remembering:**
+  the unselected/selected colors are `Style` setters, not local attributes on
+  the `Button` - a locally-set `Background` outranks a `Style` trigger in
+  WPF's value precedence, so setting it inline silently defeats the
+  `IsSelected` `DataTrigger` (written the wrong way first, caught before
+  building).
+- `ViewModels/HelpViewModel.cs`, `README.md`, `CLAUDE.md` - user-facing
+  revision note; README and CLAUDE.md updated to state the F/E/A rule as
+  confirmed and to drop the inference caveat.
+
+**Verification.** Built clean. Drove the app via UI Automation in Simulator
+mode and checked which cards are present after each filter click: All -> all
+six; Fundamentals -> Blinky (F01), Simple LED (F02), Headers (F00);
+Explorers -> Sensors 1 (E03), Electronic Load (E05); Advanced -> Direct
+Digital Synthesis (A01); back to All -> all six restored. Button labels carry
+the right counts (All 6, Fundamentals 3, Explorers 2, Advanced 1). Same
+screenshot-capture limitation as entry 43 applies - the filter row's selected
+vs. unselected styling has been reasoned about but not seen.
+
+---
+
+### 45. Library remembers previously-connected ProtoMods - app-side only, and "seen" is not "owned"
+
+**2026-08-31, 18:05 CDT**
+
+**Prompt:** in response to a proposal to have ProtoCore firmware track every
+ProtoMod it has ever interacted with, plus my own pushback that such history
+belongs to a person rather than a board: "no seeing it doesn't necessarily
+mean 'owns' - as you said it should track with an account or at the very
+least linked to user's installation of the app. Why would you need to convey
+anything to the firmware for this. I agree that nothing should be stored on
+the firmware side."
+
+**Purpose:** Fix a real defect in the Library as shipped in entry 43 - a
+module vanished from the user's library the instant it was unplugged, because
+ownership was a live snapshot of three slots. Do it without the firmware-side
+registry that was originally floated, and without overstating what the data
+actually means.
+
+**Two decisions this settles (don't relitigate):**
+1. **History is app-side, never on ProtoCore, and no wire-protocol or
+   firmware change is involved.** The user's point was sharper than my own
+   suggested firmware/app split: there is nothing to convey to firmware at
+   all. The app already receives every `PresenceReport`, so it can simply
+   record what it already sees. The earlier reasoning for why the board is the
+   wrong home still stands (a shared classroom ProtoCore gives every student
+   the same wrong answer, a reflash silently deletes it, a second ProtoCore
+   knows nothing about the first), but the implementation is now purely local
+   - no new `MsgType`, no firmware work, no cross-session agreement needed.
+2. **Seeing a module is not owning it.** Confirmed explicitly by the user. A
+   borrowed board plugged in once is recorded forever and there is no un-see,
+   so nothing in this tab may be phrased as an ownership or purchase claim.
+   Every label is about connection history instead. Real ownership, if it is
+   ever needed, is account data layered on top of this rather than read out
+   of it.
+
+**Changes:**
+- `Services/ModuleHistoryStore.cs` (new) - persists every `ProtoModId` this
+  installation has seen to `%AppData%\ProtoVerse\module-history.json`, with
+  first/last-seen timestamps and a schema version. Scoped to the app
+  installation for now; the document shape is deliberately flat and
+  account-syncable so moving it behind a user account later is a change to
+  where this class reads and writes, not a change to its callers. Skips
+  `ProtoModId.Unknown` (that means "ProtoCore saw something it can't
+  identify" - not a type, and recording it would leave a permanent
+  meaningless entry). Saves only on a genuinely new type or a new
+  last-seen day, not on every `PresenceReport`, since a hot-swap fires those
+  in bursts. Every file operation degrades to "no history" and a surfaced
+  message rather than throwing - this is a cosmetic distinction and losing it
+  must never take down a hot-swap rebuild. A corrupt file is deliberately
+  *not* deleted on read failure.
+- `ViewModels/LibraryViewModel.cs` - replaced the `IsInKit` bool with a
+  three-state `ModuleConnectionState` (NeverConnected / PreviouslyConnected /
+  ConnectedNow). `UpdateInstalled` now records to the store then recomputes;
+  `ClearInstalled` (disconnect) drops back to history-only rather than
+  resetting everything to never-seen - unplugging a board isn't the same as
+  never having had it. A board with no assigned `ProtoModId` (A01, F00) can
+  never be reported, so it stays NeverConnected and says so in its own
+  footnote. The store is constructor-injectable for testing or for
+  account-backed storage later.
+- `Views/LibraryPanel.xaml` - badge and stripe now have three colors: green
+  "Connected now", teal "Connected before", blue "Not yet connected". All
+  three cards are otherwise visually identical, so a never-connected module
+  still never reads as locked or second-class. Header subtitle rewritten off
+  "the ones in your kit" onto connection wording.
+- `ViewModels/HelpViewModel.cs`, `README.md`, `CLAUDE.md` - user-facing
+  revision note; both docs now carry the app-side-only decision, the
+  no-firmware-involvement point, and the seen-is-not-owned distinction.
+
+**Verification.** Built clean. Drove the app via UI Automation across two
+launches with the real `%AppData%` file (which did not exist beforehand):
+- Fresh launch, before connecting: 0 connected now, 0 before, 6 not yet;
+  summary "Connect your ProtoCore to start filling in your library".
+- After connecting in Simulator mode: 3 now, 0 before, 3 not yet; summary
+  "3 of 6 ProtoMods in this catalog are plugged into your ProtoCore right
+  now."
+- After clicking Disconnect: 0 now, **3 before**, 3 not yet; summary
+  "Nothing plugged in right now. You've connected 3 of 6 ProtoMods in this
+  catalog before." - this is the defect from entry 43, now fixed.
+- History file written correctly with `schemaVersion: 1` and three sightings
+  (moduleId 1/2/3, circuit codes F01/E03/E05, matching timestamps).
+- Relaunched the app from scratch: 0 now, 3 before, 3 not yet *before
+  connecting to anything*, confirming the history survives a restart.
+
+Same screenshot-capture limitation as entries 43-44 - the three badge colors
+have been reasoned about but not seen.
+
+---
+
+### 46. Local profiles and an explicit "is this yours?" question - resolving the one-way kit problem
+
+**2026-08-31, 18:20 CDT**
+
+**Prompt:** "Resolve #2. Can we create accounts with log ins (no actual
+security) just for board tracking? Login/logout/etc options on the top
+right... then you can confirm that board is or isn't in your kit." (#2 was
+the open flag from entry 45: a board plugged in once was marked forever with
+no way to un-see it.)
+
+**Purpose:** Fix the one-way-door problem, and give the tracking an owner.
+Entry 45 deliberately refused to treat a sighting as ownership but had no way
+for the user to *say* either way - so a borrowed board sat in the library
+permanently, and two people sharing a PC shared one merged history.
+
+**Two things now tracked per module, deliberately not conflated:**
+- **Has it been plugged in?** Observed automatically from `PresenceReport`.
+- **Does the user say it's theirs?** `KitStatus`, only ever set by clicking.
+A newly-seen card asks "Is this ProtoMod part of your kit?" with
+**Yes, it's mine** / **No, just borrowed**, and once answered collapses to a
+one-click flip ("Not mine after all" / "Actually, this is mine"). Nothing is
+ever claimed on the user's behalf, and no answer is permanent.
+
+**Changes:**
+- `Models/UserAccount.cs` (new) - `KitStatus` (Unanswered/InKit/NotMine),
+  `ModuleRecord` (per-module sighting timestamps + kit answer), `UserAccount`,
+  and the versioned `AccountsDocument`.
+- `Services/AccountStore.cs` (new) - profiles and their tracking, persisted to
+  `%AppData%\ProtoVerse\accounts.json`. Replaces `ModuleHistoryStore.cs`
+  (deleted), whose per-installation history is now per profile. Imports a
+  pre-accounts `module-history.json` into the first profile created, renaming
+  the old file to `.migrated` rather than deleting it; imported sightings come
+  in as `Unanswered`, since they're observations and not ownership claims.
+  Keeps the earlier design decisions: skips `ProtoModId.Unknown`, saves only
+  on a new type or new day rather than every `PresenceReport`, degrades to
+  "no accounts" on any file error, and never deletes a corrupt file it failed
+  to read.
+- `ViewModels/AccountViewModel.cs` (new) - backs the top-right control; raises
+  `SignInRequested` rather than constructing a Window, since showing a dialog
+  is the view's job.
+- `Views/SignInWindow.xaml`/`.cs` (new) - profile picker: create, pick,
+  delete (with a confirm, since deleting throws away everything that profile
+  tracked). No password field, deliberately.
+- `ViewModels/LibraryViewModel.cs` - cards now carry `KitStatus` and an
+  `IsSignedIn` flag alongside connection state; `StatusLabel` picks one of
+  five badges. Kit answers route through one `SetKitStatus` method. Signed
+  out, the ownership question is hidden entirely rather than asked with
+  nowhere to store the answer. Summary reports "plugged in right now" and
+  "confirmed in <name>'s kit" as two separate numbers.
+- `Views/LibraryPanel.xaml` - the kit prompt card, the flip button, and a
+  fifth badge state. Trigger order matters: NotMine after InKit (so a
+  disowned but previously-connected board reads blue), ConnectedNow last so
+  it always wins.
+- `Views/MainWindow.xaml`/`.cs`, `ViewModels/MainViewModel.cs` - header split
+  into a Grid with the sign-in control pinned right; `AccountStore` is owned
+  by MainViewModel and shared with the Library so both see the same active
+  profile.
+- `README.md`, `CLAUDE.md`, `HelpViewModel.cs` - documented, including that
+  the profiles are explicitly not security and shouldn't grow a password
+  field without becoming real.
+
+**Two bugs found and fixed while testing, both worth remembering:**
+1. **Subscribing to the view model's event in the `MainWindow` constructor
+   silently didn't attach**, so clicking "Sign in" did nothing at all - no
+   dialog, no error, because the view model just raises an event nobody was
+   listening to. Moved to `Loaded` (plus `DataContextChanged`), where the
+   XAML-declared DataContext is guaranteed to be in place.
+2. **A stale `ProtoVerseApp.exe` from an earlier scripted run held the output
+   file, so several rebuilds never replaced it** and multiple rounds of
+   debugging were spent on stale code. `dotnet build` does report this
+   (`error MSB3027`), but it's easy to miss under the usual warnings - grep
+   for `error MSB`, not just "Build succeeded", and kill stray processes
+   before every scripted run. Added to `CLAUDE.md`'s gotchas.
+
+**Verification.** Built clean. Because UIA can't see this app's modal dialogs
+in this environment (see below), the flow was verified in two halves:
+- *Dialog opens:* confirmed via Win32 `EnumWindows` filtered by process id -
+  clicking "Sign in" produces a new visible 380x420 top-level window at the
+  expected position, matching `SignInWindow`'s declared size.
+- *Everything else, through the main window:* seeded `accounts.json` with a
+  profile and known kit answers, then drove the app. Header showed
+  "Zach / Signed in". Cards identified by their schematic-tile circuit code
+  (not their title - a card's title also appears on *other* cards as a "leads
+  into" link, which produced a bogus reading in a first pass). Confirmed:
+  a seeded `Unanswered` board shows the prompt; `InKit` shows "In your kit"
+  with a "Not mine after all" flip; `NotMine` shows "Not in your kit" with an
+  "Actually, this is mine" flip. Clicking the prompt's "Yes, it's mine" moved
+  F01 to "In your kit" and the summary from 1 to 2 confirmed. Flipping E05
+  NotMine->InKit and E03 InKit->NotMine both worked and moved the count.
+  Connecting in Simulator mode moved F01/E03/E05 to "Connected now", left F02
+  (not reported by the simulator) at "Not yet connected", and wrote new
+  `Unanswered` records for the newly-seen boards without touching F01's
+  existing answer. Disconnecting reverted them to "In your kit" /
+  "Connected before" as appropriate. Signing out hid all tracking and
+  restored "Sign in (top right) to track which of these are in your kit."
+  A01 and F00 (no assigned `ProtoModId`) correctly stayed untracked
+  throughout, with their existing "ProtoCore can't identify this board yet"
+  footnote.
+- `accounts.json` verified on disk after each stage: kit answers persisted,
+  sighting timestamps updated, `activeAccountId` cleared on sign-out.
+
+**Still not verified: the visual appearance**, including the sign-in dialog's
+entire contents. Screenshot capture returns a blank client area for this
+app's windows in this environment, and UIA can't enumerate its modal dialogs
+at all (both now recorded in `CLAUDE.md`). The dialog is confirmed to open at
+the right size, but nobody has actually looked at it.

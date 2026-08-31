@@ -16,6 +16,18 @@ Full ProtoVerse business/product context (target audience, manual philosophy,
 the six initial ProtoMods, etc.) lives outside this repo and generally isn't
 needed to work on this app — this file has what's actually relevant here.
 
+## Git
+
+**Do not run any git command (commit, push, or otherwise) unless the user
+explicitly says so in that session — no standing exception for "this is
+just docs" or "I already committed similar changes earlier tonight."**
+Earlier sessions fell into a pattern of committing and pushing after nearly
+every change on the assumption that was the established rhythm; the user
+corrected this directly (2026-08-31) and it applies going forward, not just
+to that session. Keep `CHANGELOG.md`/`CLAUDE.md` updated per the section
+below regardless — that's still expected every time — just leave the
+actual `git add`/`commit`/`push` for the user to ask for or do themselves.
+
 ## Keeping this file and CHANGELOG.md current
 
 - Every code change gets an entry in `CHANGELOG.md` (repo root) — the prompt that
@@ -472,6 +484,57 @@ needed to work on this app — this file has what's actually relevant here.
   side. Don't re-attempt an SWD/NRST-based repro — this needs the user to
   watch a real reinsertion happen live, which is also the only way to learn
   whether Windows keeps the same COM port number across the reset.
+- **Library tab** — a top-level tab beside "Slots" in the main content area
+  (`Views/LibraryPanel.xaml`, `ViewModels/LibraryViewModel.cs`), showing the
+  whole ProtoMod catalog rather than just what's plugged in. Read-only over
+  the wire: it sends nothing and touches no module control logic; its one live
+  input is `MainViewModel` calling `Library.UpdateInstalled(...)` after a
+  `PresenceReport` (and `ClearInstalled()` on disconnect).
+  **Each card tracks two independent facts, which must not be conflated:**
+  whether the board has been *plugged in* (observed automatically from
+  `PresenceReport` — `ModuleConnectionState`) and whether the user *says it's
+  theirs* (`KitStatus`, only ever set by clicking). Seeing a board proves it
+  was plugged in, not that anyone owns it — a borrowed or classroom board is
+  the obvious case — so a newly-seen card asks "Is this ProtoMod part of your
+  kit?" and the answer is always one click from being flipped. Never make a
+  sighting silently imply ownership.
+  **Tracking is per profile** (`Services/AccountStore.cs`, persisted to
+  `%AppData%\ProtoVerse\accounts.json`), with a sign in / switch / sign out
+  control in the window's top right and a picker dialog
+  (`Views/SignInWindow.xaml`). **These profiles are explicitly not a security
+  feature** (user decision, 2026-08-31: "no actual security, just for board
+  tracking") — no password, no encryption, one readable file for everyone on
+  the machine; the point is separating two people's kits on a shared PC. Don't
+  add a password field later without making it mean something, since a fake
+  login that looks real is worse than an obviously informal one.
+  **Also settled and not to be relitigated:** this data is stored app-side,
+  explicitly *not* on ProtoCore (it belongs to a person, not a board: a shared
+  classroom ProtoCore would give every student the same wrong answer, a
+  reflash would delete it, a second ProtoCore wouldn't know about the first),
+  and **no wire-protocol or firmware change is involved at all** — the app
+  already receives every `PresenceReport` and just records what it sees. The
+  document shape is deliberately close to what a real server-backed account
+  would send, so that swap is a change inside `AccountStore`, not to its
+  callers. All its file I/O degrades to "no accounts" rather than throwing.
+  **The catalog content
+  (`Models/ProtoModLibraryCatalog.cs`) is hardcoded for v1 on purpose and is
+  held to a strict no-fabrication rule**: every description, schematic
+  summary, project idea, and "leads into" link is quoted from a document that
+  actually exists (the manuals in `PROTOVERSE/Manuals/`, the KiCad exports in
+  `PROTOVERSE/Finished Modules/`, or this repo's own docs), each carries a
+  `*Source` field that the UI displays, and anything with no source material
+  is left `null` and rendered as "coming soon". Do not fill one of those
+  nulls with something that sounds right — write the manual first, then quote
+  it. Progression links are likewise never inferred from circuit-code order
+  or series; exactly one exists today (F01 → F02) because exactly one manual
+  sentence establishes one. **The one exception to "quote, don't derive" is
+  the family**: every ProtoMod belongs to Fundamentals, Explorers, or
+  Advanced, keyed by the first letter of its circuit code (F/E/A) — confirmed
+  as a product rule by the user 2026-08-31, so a board with no manual still
+  gets a correct family. The Library's filter row is built on exactly that
+  rule. Should eventually move to a JSON/manifest source shared with the
+  manual docs — the records are already flat and JSON-friendly, and
+  `Entries` is the only thing the rest of the app reads.
 - **Help tab** — lives in the same collapsed-by-default bottom `Expander` as the
   Traffic Log (they're now two `TabItem`s of one `TabControl` there, not two
   separate Expanders). `HelpViewModel.RevisionNotes` is a hand-maintained,
@@ -544,7 +607,13 @@ needed to work on this app — this file has what's actually relevant here.
   star row measures to zero under an unconstrained parent, so the selected tab's
   content silently renders at zero height (nothing visible, no error). Use
   `Height="Auto"` and let the tab content's own sizing (e.g. a fixed-height
-  `DockPanel`) drive it instead.
+  `DockPanel`) drive it instead. **The converse is also true, which is why
+  `App.xaml` now has two TabControl styles:** the implicit (`TargetType`-only)
+  one keeps `Height="Auto"` for the Expander case above, and a keyed
+  `MainTabControlStyle` uses `Height="*"` for the top-level Slots/Library tabs,
+  which sit in a bounded `Height="*"` grid row where `Auto` would instead let
+  a long list overflow past the row rather than scrolling inside it. Don't
+  "unify" these two — they're different because their parents are.
 - The usual `<ContentPresenter ContentSource="SelectedContent"/>` shortcut for a
   custom `TabControl` template (used in Microsoft's own default template) did not
   render any content in this app, for reasons not tracked down further. Use an
@@ -580,7 +649,23 @@ needed to work on this app — this file has what's actually relevant here.
   This caused a startup `XamlParseException` once already.
 - If `dotnet build` fails with the `.exe` "locked by another process," a
   previous run is still alive — check the taskbar/Task Manager for
-  `ProtoVerseApp.exe` and close it before rebuilding.
+  `ProtoVerseApp.exe` and close it before rebuilding. **This bites hardest
+  when driving the app from a script:** a leftover instance from an earlier
+  automated run silently kept the build from replacing the `.exe`, so several
+  rounds of "build succeeded, but the fix didn't work" were actually testing
+  stale code (2026-08-31, chasing a sign-in button that appeared to do
+  nothing). `dotnet build` reports the copy failure as an error, but it's easy
+  to miss under warnings — grep the output for `error MSB` too, not just
+  "Build succeeded", and kill stray `ProtoVerseApp` processes before every
+  scripted run.
+- **UI Automation can't see this app's modal dialogs in this environment.**
+  A `ShowDialog()` window (e.g. `SignInWindow`) opens correctly but never
+  appears in the UIA tree, and while it's open the *whole* process's UIA tree
+  goes unreachable — which reads exactly like "the button did nothing." Win32
+  `EnumWindows` filtered by process id does see it (correct size and
+  position), so use that to confirm a dialog opened, and drive the rest of a
+  test through the main window. Related to, and probably the same underlying
+  cause as, the blank-white screenshot capture noted above.
 - The dev environment is VS Code + `dotnet build` / `dotnet run` from the
   integrated terminal, not full Visual Studio — no XAML visual designer in
   play, so XAML errors only surface at build/run time, not while typing.

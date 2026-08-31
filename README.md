@@ -113,6 +113,102 @@ every report — sent in reply to a request, and also unsolicited if ProtoCore
 detects a hot-swap on its own, so slots update live without needing another
 click.
 
+## ProtoMod Library
+
+The **Library** tab (next to **Slots** in the main content area) shows the
+whole ProtoMod catalog, not just what's plugged into the ProtoCore right now.
+It's a discovery surface: every module is shown at full strength — never
+dimmed, locked, or hidden — with one of three connection states:
+
+| Badge | Meaning | Accent |
+|---|---|---|
+| **Connected now** | In a slot in the most recent `PresenceReport` | green |
+| **In your kit** | The user said it's theirs | teal |
+| **Connected before** | Seen at some point, not answered for yet | teal |
+| **Not in your kit** | The user said it isn't theirs | blue |
+| **Not yet connected** | Never seen by this profile | blue |
+
+Two independent facts are tracked per module, and the app is careful not to
+conflate them:
+
+- **Has it been plugged in?** Observed automatically from `PresenceReport` —
+  the same report that populates the Slots tab, so the two can't disagree.
+- **Does the user say it's theirs?** Only ever set by clicking. Seeing a
+  board proves it was plugged in, not that it belongs to anyone — a borrowed
+  or classroom board is the obvious case. So the first time a board is seen,
+  its card asks "Is this ProtoMod part of your kit?" with **Yes, it's mine**
+  / **No, just borrowed**, and the answer is always one click from being
+  flipped afterwards. Nothing is ever silently claimed on the user's behalf.
+
+### Profiles
+
+Board tracking is per profile, so two people sharing a PC don't merge kits.
+The control in the window's top right shows who's signed in, with
+**Sign in** / **Switch** / **Sign out**; the picker lets you create a
+profile, pick an existing one, or delete one.
+
+**These profiles are not a security feature and aren't meant to be.** There
+is no password and no encryption — signing in is picking a name off a list,
+and every profile's data sits in one readable JSON file
+(`%AppData%\ProtoVerse\accounts.json`, written by
+`Services/AccountStore.cs`). Their job is separating one person's tracking
+from another's, not keeping anyone out. Don't add a password field later
+without making it mean something: a fake login that looks real is worse than
+an obviously informal one.
+
+While signed out, the catalog still shows in full — only the tracking is
+hidden, and nothing is recorded.
+
+**Tracking is stored app-side, never on ProtoCore.** Putting it in firmware
+was considered and rejected (2026-08-31): it belongs to a person, not a
+board. A shared classroom ProtoCore would give every student the same wrong
+answer, a reflash would silently delete it, and a second ProtoCore would know
+nothing about the first. **No wire-protocol or firmware change is involved at
+all** — the app already receives every `PresenceReport`, so it simply records
+what it already sees. The on-disk document is deliberately close to what a
+real server-backed account would send (stable id, display name, flat list of
+per-module records), so moving it behind a real account later is a change to
+where `AccountStore` reads and writes, not a change to its callers.
+
+The tab is read-only over the wire. It sends no frames and touches no module
+control logic.
+
+**Catalog content is hardcoded for v1, on purpose**
+(`Models/ProtoModLibraryCatalog.cs`). It should eventually move to a
+JSON/manifest source generated from — or shared with — the ProtoMod manual
+documents in `PROTOVERSE/Manuals/`, so a new module's catalog entry falls out
+of writing its manual instead of being transcribed by hand. The record types
+are already flat and JSON-friendly, and `ProtoModLibraryCatalog.Entries` is
+the only thing the rest of the app reads, so that swap should be a change to
+that one file.
+
+**Nothing in the catalog is invented.** Every description, schematic summary,
+project idea, and "leads into" link is quoted from, or directly summarized
+from, a document that actually exists — the module manuals in
+`PROTOVERSE/Manuals/`, the KiCad schematic exports in
+`PROTOVERSE/Finished Modules/`, or this repo's own `CLAUDE.md`. Each entry
+carries the source it came from, and the UI displays it. Where no source
+material exists (no manual written, no difficulty rated, no documented next
+step), the field is left null and the card says "coming soon" rather than
+being filled with plausible-sounding text. Two things to know when editing it:
+
+- **Progression links are not inferred.** A "leads into" link only exists
+  where a manual actually says one module leads into another. Today that's a
+  single link — F01 → F02, from the Blinky manual's "Future ProtoMods for
+  you" section. Circuit-code order, series, and difficulty are *not* treated
+  as evidence of a teaching sequence.
+- **Family is the one field that may be derived.** Every ProtoMod belongs to
+  one of three families, keyed by the first letter of its circuit code:
+  **F → Fundamentals, E → Explorers, A → Advanced** (confirmed as a product
+  rule, 2026-08-31). So a board with no manual written yet still gets a
+  correct family. Nothing else may be derived this way.
+
+The filter row above the grid pins the view to one family, with the catalog
+split shown in each button's count. "All" is the default — the tab's job is
+showing the whole catalog, so filtering is opt-in. Following a "leads into"
+link that points outside the active family resets the filter to All, so the
+link can never highlight a card that's been filtered out of view.
+
 ## Diagnosing a real hardware problem
 
 The Traffic Log (collapsed by default, bottom of the window) is the first
