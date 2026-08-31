@@ -1539,10 +1539,10 @@ stop getting any reply at all to further commands - no `Response`, no
   returns, rather than hanging the system. Built, flashed to the bench
   board, verified via download-verify, and pushed on the firmware side
   (commit `9fce051`).
-- **Not yet re-confirmed against real hardware** - the fix is flashed, but
-  the user hasn't yet repeated the rapid-Apply pattern that originally
-  triggered the freeze to confirm it no longer wedges the board. Don't
-  treat this as fully closed until that retest happens.
+- **Confirmed fixed against real hardware, same day, 23:10 CDT:** user
+  repeated the original trigger - clicking Apply on the Electronic Load
+  panel rapidly, several times in a row - and the board stayed responsive
+  throughout, no repeat of the freeze. Fully closed.
 - Worth remembering for future diagnosis on this side: a silent freeze
   (zero bytes back, connection otherwise looks healthy) versus an explicit
   `Error` response are different failure modes with different causes here
