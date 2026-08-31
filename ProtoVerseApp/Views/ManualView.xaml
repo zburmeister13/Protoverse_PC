@@ -1,0 +1,399 @@
+<UserControl x:Class="ProtoVerseApp.Views.ManualView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:ProtoVerseApp.ViewModels"
+             xmlns:mdl="clr-namespace:ProtoVerseApp.Models.Manual"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/mc"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:ManualViewModel}">
+
+    <!--
+        In-app manual renderer. One set of DataTemplates keyed by block type, so a new
+        module's manual is data (a ManualDocument) and never new XAML. That claim is
+        the main thing this evaluation branch exists to test - see EVALUATION.md.
+
+        Every template here is matched by type, not by name, so ManualViewModel can
+        hand the ItemsControl a mixed list of content records and interactive view
+        models and let WPF pick.
+    -->
+    <UserControl.Resources>
+
+        <!-- ============================ static content ============================ -->
+
+        <DataTemplate DataType="{x:Type mdl:ParagraphBlock}">
+            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,0,10"
+                       LineHeight="19" Foreground="{StaticResource TextPrimaryBrush}"/>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type mdl:SubheadingBlock}">
+            <TextBlock Text="{Binding Text}" FontSize="13" FontWeight="SemiBold"
+                       Margin="0,8,0,6" Foreground="{StaticResource AccentTealBrush}"/>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type mdl:BulletsBlock}">
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"
+                           Foreground="{StaticResource TextPrimaryBrush}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Heading}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,3"
+                                       Foreground="{StaticResource TextPrimaryBrush}">
+                                <Run Text="•  " Foreground="{StaticResource AccentGreenBrush}"/><Run Text="{Binding Mode=OneWay}"/>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Callout: one visual treatment, four colour/label variants driven off Kind.
+             These are single-row tables in the Word source; treating them as a first
+             class block type (rather than a styled paragraph) is what lets a Tech note
+             and an Observe prompt stay visually distinct without per-manual markup. -->
+        <DataTemplate DataType="{x:Type mdl:CalloutBlock}">
+            <Border x:Name="callout" Margin="0,4,0,12" Padding="12,9" CornerRadius="5"
+                    Background="{StaticResource BgBrush}"
+                    BorderBrush="{StaticResource AccentTealBrush}" BorderThickness="0,0,0,0">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="BorderThickness" Value="3,0,0,0"/>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <TextBlock x:Name="calloutTitle" Text="{Binding Title}" FontSize="10" FontWeight="Bold"
+                               Margin="0,0,0,4" Foreground="{StaticResource AccentTealBrush}"/>
+                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Title}" Value="{x:Null}">
+                    <Setter TargetName="calloutTitle" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Observe">
+                    <Setter TargetName="callout" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                    <Setter TargetName="calloutTitle" Property="Foreground" Value="{StaticResource AccentBlueBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Reassurance">
+                    <Setter TargetName="callout" Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+                    <Setter TargetName="calloutTitle" Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+                </DataTrigger>
+                <!-- Placeholder callouts are meant to look unfinished. A half-written
+                     manual must never be mistakable for a finished one. -->
+                <DataTrigger Binding="{Binding Kind}" Value="Placeholder">
+                    <Setter TargetName="callout" Property="BorderBrush" Value="{StaticResource AccentOrangeBrush}"/>
+                    <Setter TargetName="callout" Property="BorderThickness" Value="1"/>
+                    <Setter TargetName="calloutTitle" Property="Foreground" Value="{StaticResource AccentOrangeBrush}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Figure: always a placeholder frame. No manual in this project has real
+             figures - the Word sources carry literal "[ figure / photo ]" markers. -->
+        <DataTemplate DataType="{x:Type mdl:FigureBlock}">
+            <Border Margin="0,4,0,12" Padding="16" CornerRadius="5" MinHeight="80"
+                    Background="{StaticResource BgBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="[ figure ]" HorizontalAlignment="Center" FontFamily="Consolas"
+                               FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock Text="{Binding Caption}" TextWrapping="Wrap" TextAlignment="Center"
+                               FontSize="10" FontStyle="Italic" Margin="0,6,0,0"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- ========================== interactive content ========================== -->
+
+        <!-- Checklists and step lists share one template: both are "items you tick
+             off", and the template's Assembly steps / You'll need / Now try this are
+             the same interaction with different framing. -->
+        <DataTemplate DataType="{x:Type vm:CheckableListViewModel}">
+            <StackPanel Margin="0,0,0,12">
+                <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Visibility="{Binding HasHeading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,0,7">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}"
+                                              VerticalAlignment="Top" Margin="0,1,6,0"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Ordinal}" FontWeight="SemiBold"
+                                               Margin="0,0,6,0" VerticalAlignment="Top"
+                                               Foreground="{StaticResource AccentTealBrush}"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding Text}" TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                </Grid>
+                                <!-- Observe prompts sit with their step, indented, so a
+                                     learner reads them at the moment they apply. -->
+                                <Border Margin="26,6,0,0" Padding="10,7" CornerRadius="4"
+                                        Background="{StaticResource BgBrush}"
+                                        BorderBrush="{StaticResource AccentBlueBrush}" BorderThickness="3,0,0,0"
+                                        Visibility="{Binding HasObserve, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <StackPanel>
+                                        <TextBlock Text="OBSERVE" FontSize="9" FontWeight="Bold" Margin="0,0,0,3"
+                                                   Foreground="{StaticResource AccentBlueBrush}"/>
+                                        <TextBlock Text="{Binding Observe}" TextWrapping="Wrap" FontSize="12"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Fillable value table. On paper this is a grid you print and write on; here
+             the learner's columns are real text fields. This is the pattern the
+             evaluation is most interested in. -->
+        <DataTemplate DataType="{x:Type vm:ValueTableViewModel}">
+            <StackPanel Margin="0,4,0,12">
+                <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Visibility="{Binding HasHeading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"
+                        Background="{StaticResource BgBrush}" Padding="8">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding Columns}" Margin="0,0,0,6">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Mode=OneWay}" FontSize="10" FontWeight="Bold"
+                                               TextWrapping="Wrap" Margin="3,0"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <UniformGrid Rows="1" Margin="0,0,0,4">
+                                        <!-- Fixed cells first, then one text box per
+                                             learner column. UniformGrid keeps them
+                                             aligned with the header without a Grid
+                                             whose column count varies per table. -->
+                                        <ItemsControl ItemsSource="{Binding FixedCells}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Mode=OneWay}" Margin="3,4,3,0"
+                                                               FontWeight="SemiBold" FontSize="12"
+                                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <ItemsControl ItemsSource="{Binding EditableCells}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                                             Margin="3,0" FontSize="12"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </UniformGrid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="Your entries aren't saved yet - see EVALUATION.md."
+                           FontSize="10" FontStyle="Italic" Margin="0,4,0,0"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:QuestionListViewModel}">
+            <ItemsControl ItemsSource="{Binding Questions}" Margin="0,0,0,10">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,0,0,12">
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,0,5"
+                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBox Text="{Binding Answer, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="52"
+                                     VerticalScrollBarVisibility="Auto"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </DataTemplate>
+
+        <!-- ============================== a section ============================== -->
+
+        <DataTemplate x:Key="SectionTemplate" DataType="{x:Type vm:ManualSectionViewModel}">
+            <StackPanel Margin="0,0,0,22">
+                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" Margin="0,0,0,3"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <Border Height="2" HorizontalAlignment="Left" Width="46" Margin="0,0,0,10"
+                        Background="{StaticResource AccentGradientBrush}"/>
+
+                <!-- Spoiler gate. The template forbids anything spoiling an answer from
+                     appearing before the follow-up questions, so the answer key opts
+                     into this rather than merely sitting further down the page. -->
+                <Border Padding="14" CornerRadius="5" Margin="0,0,0,8"
+                        Background="{StaticResource BgBrush}"
+                        BorderBrush="{StaticResource AccentOrangeBrush}" BorderThickness="1"
+                        Visibility="{Binding ShowRevealButton, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel>
+                        <TextBlock Text="Answers are hidden until you ask for them."
+                                   TextWrapping="Wrap" FontSize="12" Margin="0,0,0,8"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <Button Content="Reveal answers" Command="{Binding RevealCommand}"
+                                HorizontalAlignment="Left" FontSize="11" Padding="10,4"/>
+                    </StackPanel>
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding Blocks}"
+                              Visibility="{Binding ShowContent, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="150"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Table of contents. A manual is 8 sections plus 3 appendices; a learner
+             mid-task must not have to scroll past everything to get back to a step. -->
+        <DockPanel Grid.Column="0" Margin="0,0,10,0">
+            <TextBlock DockPanel.Dock="Top" Text="CONTENTS" FontSize="10" FontWeight="Bold" Margin="0,0,0,6"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+            <ListBox ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection}"
+                     Background="Transparent" BorderThickness="0">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="row" Padding="7,4" CornerRadius="3" Margin="0,0,0,1"
+                                            Background="Transparent">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="row" Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="row" Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="11">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                    <Style.Triggers>
+                                        <!-- Appendices read as secondary in the TOC:
+                                             reachable, but not part of the learner
+                                             flow. -->
+                                        <DataTrigger Binding="{Binding IsAppendix}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                                            <Setter Property="FontStyle" Value="Italic"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+
+        <ScrollViewer x:Name="ManualScroller" Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,0,10,0">
+
+                <!-- Header block: series / code / name / one-liner / metadata row -->
+                <TextBlock FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentTealBrush}">
+                    <Run Text="{Binding Header.Series, Mode=OneWay}"/><Run Text="  ·  MODULE "/><Run Text="{Binding Header.Code, Mode=OneWay}"/>
+                </TextBlock>
+                <TextBlock Text="{Binding Header.Name}" FontSize="21" FontWeight="Bold" Margin="0,2,0,0"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Text="{Binding Header.Tagline}" TextWrapping="Wrap" FontSize="12" Margin="0,3,0,0"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                <ItemsControl Margin="0,10,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <StackPanel Margin="0,0,26,0">
+                        <TextBlock Text="DIFFICULTY" FontSize="9" FontWeight="Bold"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock Text="{Binding Header.Difficulty, TargetNullValue='Not rated'}" FontSize="12"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </StackPanel>
+                    <StackPanel Margin="0,0,26,0">
+                        <TextBlock Text="TIME" FontSize="9" FontWeight="Bold"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock Text="{Binding Header.Time, TargetNullValue='Not stated'}" FontSize="12"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="PREREQUISITES" FontSize="9" FontWeight="Bold"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock Text="{Binding Header.Prerequisites, TargetNullValue='Not stated'}" FontSize="12"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </StackPanel>
+                </ItemsControl>
+
+                <!-- Provenance + how finished this manual actually is. -->
+                <Border Margin="0,14,0,18" Padding="10,8" CornerRadius="4"
+                        Background="{StaticResource BgBrush}"
+                        BorderBrush="{StaticResource AccentOrangeBrush}" BorderThickness="1"
+                        Visibility="{Binding HasPlaceholders, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel>
+                        <TextBlock Text="{Binding PlaceholderWarning}" TextWrapping="Wrap" FontSize="11"
+                                   FontWeight="SemiBold" Foreground="{StaticResource AccentOrangeBrush}"/>
+                        <TextBlock Text="{Binding SourceNote}" TextWrapping="Wrap" FontSize="10" Margin="0,4,0,0"
+                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding MainSections}" ItemTemplate="{StaticResource SectionTemplate}"/>
+
+                <!-- Appendices, visually separated from the learner flow. -->
+                <Border Height="1" Margin="0,4,0,16" Background="{StaticResource BorderBrush}"/>
+                <TextBlock Text="APPENDICES" FontSize="10" FontWeight="Bold" Margin="0,0,0,12"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <ItemsControl ItemsSource="{Binding Appendices}" ItemTemplate="{StaticResource SectionTemplate}"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
