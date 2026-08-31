@@ -348,14 +348,25 @@ needed to work on this app — this file has what's actually relevant here.
   `PROTOCOL_ERR_NOT_IMPLEMENTED` coming back from the board), the bench
   board just hadn't been reflashed yet with the build containing the real
   handler. The firmware session has since flashed and verified that build
-  via STM32CubeProgrammer. **Still not user-retested against real
-  hardware as of this writing** — when it is, this note and the "real
-  hardware verification is still pending" line above should be updated
-  together. If a future "nothing happens" report comes in against real
-  hardware for any module, check the Traffic Log for an `Error` response
-  before assuming an app bug — no panel currently surfaces `MSG_ERROR` to
-  the UI, only the Traffic Log does, so a firmware-side rejection can look
-  identical to the app silently doing nothing.
+  via STM32CubeProgrammer, and **this is now confirmed against real
+  hardware** — a real Traffic Log capture the same day shows correct
+  `SetCurrentLimitMa` exchanges for 10mA, 100mA, and 250mA, each with a
+  `Response` matching the calibration math. If a future "nothing happens"
+  report comes in against real hardware for any module, check the Traffic
+  Log for an `Error` response before assuming an app bug — no panel
+  currently surfaces `MSG_ERROR` to the UI, only the Traffic Log does, so a
+  firmware-side rejection can look identical to the app silently doing
+  nothing (a *third*, distinct possibility — total silence with no `Error`
+  at all — turned out to mean ProtoCore's whole main loop had frozen; see
+  the `Protocol_SendFrame` bug noted further up in this section).
+  **PWM frequency changed 1kHz→5kHz firmware-side same day** (commit
+  `64d6351`, to reduce ripple on the op-amp's filtered input the user
+  observed on the bench) — traded duty-step resolution 50→10 steps to hold
+  the ISR rate fixed at an already-safe rate. Wire format is unchanged
+  (`duty_percent` is still a single 0-100 byte in the Response), but real
+  hardware now only ever reports it in multiples of 10 rather than 2 — not
+  a bug if a duty readout looks coarser than the calibration formula
+  implies, that's now just the real achievable resolution.
 - Panels are populated dynamically from `PresenceReport`, not hardcoded. There
   will eventually be many more ProtoMod types than any given ProtoCore unit has
   slots for (currently three), so the app must never assume a fixed lineup.

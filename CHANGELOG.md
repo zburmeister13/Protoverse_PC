@@ -1550,3 +1550,31 @@ stop getting any reply at all to further commands - no `Response`, no
   after previously-working exchanges means the MCU's main loop itself may
   have stopped running. The Traffic Log is the tool that distinguishes
   them; this app has no other way to tell the two apart today.
+
+### 39. Documentation-only: Electronic Load hardware confirmed, firmware bumped PWM frequency
+**2026-08-30, 23:12 CDT**
+
+**Prompt:** two cross-session updates from the firmware session - first the
+user's confirmation that entry 38's rapid-Apply retest holds up on real
+hardware, then an unrelated FYI that ElectronicLoad's PWM frequency moved
+1kHz→5kHz to cut ripple the user saw on the bench.
+
+**Purpose:** Keep CLAUDE.md accurate as of the last real information from
+either side; no app code needed to change for either update.
+
+**Changes:**
+- CLAUDE.md: marked entry 38's freeze fix as confirmed against real
+  hardware (user repeated the rapid-Apply trigger, board stayed
+  responsive) rather than "not yet re-confirmed."
+- CLAUDE.md: also caught and fixed a second, unrelated stale note in the
+  same section - entry 37's "still not user-retested against real
+  hardware" line was already outdated by the time entry 38 was written;
+  this session's own Traffic Log captures from earlier the same evening
+  (10mA/100mA/250mA all getting correct Responses) were themselves the
+  retest, just not yet reflected in the doc. Marked confirmed.
+- CLAUDE.md: noted the firmware-side PWM frequency change (1kHz→5kHz,
+  firmware commit `64d6351`) - wire format is unchanged, `duty_percent` is
+  still a single 0-100 byte, but real hardware now only reports it in
+  multiples of 10 (was 2) since the frequency bump traded duty-step
+  resolution for a fixed ISR rate. Not a bug if a future duty readout
+  looks coarser than the calibration formula alone would suggest.
