@@ -378,6 +378,31 @@ needed to work on this app — this file has what's actually relevant here.
   hardware now only ever reports it in multiples of 10 rather than 2 — not
   a bug if a duty readout looks coarser than the calibration formula
   implies, that's now just the real achievable resolution.
+  **Superseded by a full 1-300mA real-hardware sweep, 2026-08-31 (CHANGELOG
+  entry 42):** duty actually increments by 1 roughly every 3mA in current
+  firmware (fine-grained, matching the `10Ω/3.3V` calibration formula), not
+  in multiples of 10 - the "multiples of 10" claim above was accurate for
+  the 5kHz-PWM firmware build at the time it was written, but a later
+  firmware calibration fix (for an unrelated 10mA/20mA duty-collision bug)
+  evidently changed the achievable resolution back to fine-grained. The
+  firmware session independently confirmed the sweep's numbers match their
+  current calibration constants exactly. Trust the fine-grained reading as
+  current; the "multiples of 10" note above is historical, not current
+  behavior.
+  **Also worth remembering, since it cost real back-and-forth with the
+  firmware session to sort out:** that same sweep initially appeared to
+  show the Response's echoed `current_ma` wrapping to 0 at 256mA (an
+  apparent 8-bit truncation). That was **not a firmware bug** - firmware's
+  `send_state()` correctly encodes both bytes. The wrap was a bug in this
+  session's own one-off diagnostic PowerShell script: `-shl` in PowerShell
+  preserves the type of its left operand, so shifting a `[byte]` left by 8
+  truncates within an 8-bit container instead of promoting to a wider type
+  first, silently zeroing the high-byte contribution for any value >= 256.
+  Fixed in the script (cast to `[int]` before shifting). No firmware or app
+  change resulted from this - flagging only as a reminder that a
+  diagnostic tool's own bug can look exactly like the hardware bug it was
+  built to find, and is worth ruling out before reporting a finding
+  cross-session as if it were confirmed.
 - Panels are populated dynamically from `PresenceReport`, not hardcoded. There
   will eventually be many more ProtoMod types than any given ProtoCore unit has
   slots for (currently three), so the app must never assume a fixed lineup.

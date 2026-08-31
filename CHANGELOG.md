@@ -1694,3 +1694,70 @@ app actually is today, for a human landing on the repo cold.
   ProtoMod" walkthrough from the original, since both were still accurate.
   Points to `CLAUDE.md`/`CHANGELOG.md` for anything more detailed rather
   than duplicating their content.
+
+### 42. Ran a real-hardware SetCurrentLimitMa sweep for the firmware session: confirmed their fix, then found and fixed a bug in my own diagnostic script, not firmware
+**2026-08-31, 00:36 CDT**
+
+**Prompt:** a cross-session request from the firmware session - after adding
+a calibration correction to `handle_command()` for a user-reported "10mA and
+20mA produce the same duty" bug, they wanted real empirical data rather than
+reasoning about the fix by hand: sweep `SetCurrentLimitMa` across the full
+1-300mA range against the real bench board and log each Response's echoed
+current/duty. Confirmed with the user first (`AskUserQuestion`) before
+running ~300 commands against real hardware and before disconnecting the
+GUI's live connection to free the port for a standalone script.
+
+**Purpose:** Get precise, real-hardware data to either confirm the
+firmware session's calibration fix or pinpoint exactly where duty_percent
+collides, rather than continuing to reason about the fix from firmware
+source alone.
+
+**Changes:**
+- No app code changed - this was a diagnostic run using a new standalone
+  PowerShell script (not committed to the repo - a one-off diagnostic
+  tool, kept in the session scratchpad) that talks to the serial port
+  directly, implementing the same wire protocol as `Models/ProtocolFrame.cs`
+  byte-for-byte, bypassing the GUI entirely for speed and reliability
+  across ~300 sequential commands.
+- Disconnected the GUI first to free the COM port (with the user's
+  explicit go-ahead), ran the sweep, then reconnected the GUI afterward -
+  in the process, noticed the board had re-enumerated from `COM4` to
+  `COM3` partway through this session (a real, if minor, instance of the
+  "COM port renumbers on replug/reset" behavior already documented
+  elsewhere in this file).
+- **Result 1, confirmed correct: the originally-reported duty collision is
+  gone.** 10mA now produces duty 2%, 20mA produces duty 5% - cleanly
+  distinct - and duty climbs smoothly and monotonically from 1mA up through
+  300mA (about one duty step per 3.16mA, consistent with the documented
+  10Ω/3.3V calibration formula). The firmware session confirmed this
+  matches their new calibration constants exactly
+  (`CAL_SLOPE_MV_PER_MA=9.3828`, `CAL_OFFSET_MV=32.906`). The 95% (not
+  100%) duty cap at 300mA is also expected, not a bug - the correction has
+  to overshoot the naive formula's 90.9% to compensate for real VDD
+  running below the nominal 3.3V assumption.
+- **Result 2, initially reported as a firmware bug, was actually a bug in
+  this session's own diagnostic script - corrected, not firmware's fault.**
+  The sweep's logged `EchoedMa` wrapped to 0 at `CommandedMa=256` and
+  counted up from there, which looked exactly like an 8-bit truncation
+  server-side. Reported it to the firmware session as a probable firmware
+  bug. They checked their actual `send_state()` source and showed it
+  correctly encodes both bytes (`payload[0] = current_ma & 0xFF`,
+  `payload[1] = current_ma >> 8`) - and pointed out that a decoder which
+  only reads `payload[0]` would produce exactly this symptom. That was
+  the real cause, confirmed by testing the decode line in isolation:
+  PowerShell's `-shl` operator **preserves the type of its left operand**,
+  so `[byte]$x -shl 8` computes the shift in an 8-bit container and
+  silently truncates the result back to 0 instead of promoting to a wider
+  integer type first - `$payload[0] -bor ($payload[1] -shl 8)` therefore
+  always evaluated the high-byte term as 0 for any value >= 256, even
+  though `$payload[1]` itself held the correct byte. Fixed in the
+  scratchpad script by casting to `[int]` before shifting
+  (`[int]$payload[1] -shl 8`); confirmed there is no firmware bug here at
+  all. Worth remembering for any future one-off PowerShell diagnostic
+  script that reconstructs a multi-byte value: cast to a wider integer
+  type *before* shifting, not after.
+- Net result: no firmware or app changes needed from this sweep - both
+  sides are working correctly. The value was in getting real data to
+  confirm the calibration fix, and in catching a tooling bug in the
+  process of investigating what turned out to be a second tooling bug
+  rather than a second firmware one.
