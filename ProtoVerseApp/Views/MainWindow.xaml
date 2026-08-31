@@ -4,7 +4,10 @@
         xmlns:vm="clr-namespace:ProtoVerseApp.ViewModels"
         xmlns:views="clr-namespace:ProtoVerseApp.Views"
         xmlns:conv="clr-namespace:ProtoVerseApp.Converters"
-        Title="ProtoVerse" Height="700" Width="900"
+        <!-- Widened on the manuals eval branch: the Slots tab now carries a slot
+             navigator, a live panel and a manual with its own table of contents, and
+             at 900px the manual body was squeezed to about 500px. -->
+        Title="ProtoVerse" Height="780" Width="1180" MinWidth="900" MinHeight="600"
         Icon="/Assets/AppIcon.ico"
         Background="{StaticResource BgBrush}" Foreground="{StaticResource TextPrimaryBrush}">
 
@@ -138,35 +141,129 @@
         -->
         <TabControl Grid.Row="3" Style="{StaticResource MainTabControlStyle}">
         <TabItem Header="Slots">
-        <!-- Stacked ProtoMod panels. Scrollable now that telemetry panels can hold
-             charts tall enough to exceed the window (see AccelTemp/ElectronicLoad). -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding Panels}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Vertical"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8"
-                                Background="{StaticResource SurfaceBrush}"
-                                Margin="0,0,4,10" Padding="14">
+        <!--
+            Slot navigator + workspace, replacing the previous stacked-panel list
+            (eval branch, 2026-08-31). The left column is a compact map of ProtoCore's
+            three physical slots - a colored dot for presence plus what's in it -
+            and selecting one opens that module's workspace on the right.
+
+            The workspace keeps the module's live control panel docked above its
+            manual, deliberately: reading a step and watching the board respond to it
+            is the whole point, so the manual must never take the live state
+            full-screen. That constraint is why this isn't simply a third top-level
+            tab next to Slots and Library.
+
+            Known limitation, accepted for now: this models one module at a time, so
+            an exercise spanning two ProtoMods has no home here yet.
+        -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="185"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0" Margin="0,0,12,0">
+                <TextBlock DockPanel.Dock="Top" Text="SLOTS" FontSize="10" FontWeight="Bold"
+                           Margin="0,0,0,8" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <ListBox ItemsSource="{Binding Slots}" SelectedItem="{Binding SelectedSlot}"
+                         Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Margin" Value="0,0,0,4"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="row" Padding="10,8" CornerRadius="5"
+                                                Background="{StaticResource SurfaceAltBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="row" Property="BorderBrush"
+                                                        Value="{StaticResource TextSecondaryBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="row" Property="Background"
+                                                        Value="{StaticResource SurfaceBrush}"/>
+                                                <Setter TargetName="row" Property="BorderBrush"
+                                                        Value="{StaticResource AccentTealBrush}"/>
+                                                <Setter TargetName="row" Property="BorderThickness" Value="2"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
                             <StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                <StackPanel Orientation="Horizontal">
+                                    <!-- Same SlotStateToBrushConverter the stacked
+                                         layout used: gray empty, green occupied,
+                                         orange present-but-unsupported. -->
+                                    <Ellipse Width="9" Height="9" Margin="0,0,7,0" VerticalAlignment="Center"
                                              Stroke="{StaticResource BorderBrush}" StrokeThickness="1"
                                              Fill="{Binding SlotState, Converter={StaticResource SlotStateToBrushConverter}}"/>
-                                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="{Binding SlotName}" FontSize="10" FontWeight="Bold"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
                                 </StackPanel>
-                                <ContentPresenter Content="{Binding}"/>
+                                <TextBlock Text="{Binding Label}" TextWrapping="Wrap" FontSize="12"
+                                           FontWeight="SemiBold" Margin="16,2,0,0"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Manual available" FontSize="9" Margin="16,2,0,0"
+                                           Foreground="{StaticResource AccentTealBrush}"
+                                           Visibility="{Binding HasManual, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             </StackPanel>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <!-- Workspace for the selected slot: live panel docked top, manual below. -->
+            <Grid Grid.Column="1" DataContext="{Binding SelectedSlot}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Background="{StaticResource SurfaceBrush}"
+                        Margin="0,0,0,10" Padding="14">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Stroke="{StaticResource BorderBrush}" StrokeThickness="1"
+                                     Fill="{Binding SlotState, Converter={StaticResource SlotStateToBrushConverter}}"/>
+                            <TextBlock Text="{Binding SlotName}" FontWeight="Bold" FontSize="14"
+                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,8,0"/>
+                            <TextBlock Text="{Binding Label}" FontWeight="Bold" FontSize="14"/>
+                        </StackPanel>
+                        <!-- The module's own panel, unchanged - same view models and
+                             DataTemplates the stacked layout used. -->
+                        <ContentPresenter Content="{Binding Content}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Background="{StaticResource SurfaceBrush}" Padding="14"
+                        Visibility="{Binding HasManual, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <views:ManualView DataContext="{Binding Manual}"/>
+                </Border>
+
+                <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Background="{StaticResource SurfaceBrush}" Padding="14"
+                        Visibility="{Binding HasManual, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                    <TextBlock TextWrapping="Wrap" VerticalAlignment="Top" FontStyle="Italic"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Text="No in-app manual for this slot yet. Only the Electronic Load (E05) has one on this evaluation branch."/>
+                </Border>
+            </Grid>
+        </Grid>
         </TabItem>
             <TabItem Header="Library">
                 <views:LibraryPanel DataContext="{Binding Library}"/>

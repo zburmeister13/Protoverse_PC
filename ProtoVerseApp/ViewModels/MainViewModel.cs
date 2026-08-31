@@ -31,7 +31,21 @@ namespace ProtoVerseApp.ViewModels
         private readonly FrameDispatcher _dispatcher;
 
         public ObservableCollection<string> AvailablePorts { get; } = new();
-        public ObservableCollection<object> Panels { get; } = new();
+
+        /// <summary>ProtoCore's physical slots, in slot order - always exactly
+        /// SlotCount of them, occupied or not. Replaced the old flat
+        /// `ObservableCollection&lt;object&gt; Panels` when the layout became a
+        /// navigator plus detail pane: the navigator needs to show empty slots as rows
+        /// rather than as stacked "nothing here" cards, and needs a slot number to show
+        /// against each. The panel view models inside are unchanged and are still built
+        /// by the same ModuleCatalog call.</summary>
+        public ObservableCollection<SlotViewModel> Slots { get; } = new();
+
+        /// <summary>Which slot's workspace (live panel + manual) fills the detail pane.
+        /// Never null once the constructor has run - selection falls back to slot 0
+        /// rather than showing an empty right-hand side, which reads as broken.</summary>
+        [ObservableProperty]
+        private SlotViewModel? _selectedSlot;
         public TrafficLogViewModel TrafficLog { get; }
         public HelpViewModel Help { get; } = new();
 
@@ -217,7 +231,7 @@ namespace ProtoVerseApp.ViewModels
             //     misbehaving ProtoMod type (e.g. a bug in a newly-added panel's
             //     constructor) degrades just that slot to "Unsupported" instead of
             //     losing the whole report - the other slots still update normally.
-            var newPanels = new List<object>(SlotCount);
+            var newPanels = new List<SlotViewModel>(SlotCount);
             var slotErrors = new List<string>();
             var detectedIds = new List<ProtoModId>();
             int detectedCount = 0;
@@ -227,7 +241,7 @@ namespace ProtoVerseApp.ViewModels
                 var moduleId = (ProtoModId)(ushort)(frame.Payload[slot * 2] | (frame.Payload[slot * 2 + 1] << 8));
                 if (moduleId == ProtoModId.None)
                 {
-                    newPanels.Add(new EmptySlotViewModel());
+                    newPanels.Add(SlotViewModel.Empty(slot));
                     continue;
                 }
 
@@ -241,20 +255,24 @@ namespace ProtoVerseApp.ViewModels
                 detectedIds.Add(moduleId);
                 try
                 {
-                    newPanels.Add(ModuleCatalog.TryCreate(moduleId, _dispatcher) ?? (object)new UnknownModuleViewModel(moduleId));
+                    var panel = ModuleCatalog.TryCreate(moduleId, _dispatcher);
+                    newPanels.Add(panel != null
+                        ? new SlotViewModel(slot, panel, moduleId, SlotState.Occupied, panel.DisplayName)
+                        : BuildUnsupportedSlot(slot, moduleId));
                 }
                 catch (Exception ex)
                 {
-                    newPanels.Add(new UnknownModuleViewModel(moduleId));
+                    newPanels.Add(BuildUnsupportedSlot(slot, moduleId));
                     slotErrors.Add($"slot {slot} ({moduleId}): {ex.GetType().Name}");
                 }
             }
 
             DetachModulePanels();
-            Panels.Clear();
+            Slots.Clear();
             foreach (var panel in newPanels)
-                Panels.Add(panel);
+                Slots.Add(panel);
 
+            RestoreSelection();
             Library.UpdateInstalled(detectedIds);
 
             StatusMessage = slotErrors.Count == 0
@@ -270,19 +288,51 @@ namespace ProtoVerseApp.ViewModels
         /// detached or block a hot-swap rebuild from completing.</summary>
         private void DetachModulePanels()
         {
-            foreach (var module in Panels.OfType<ModulePanelViewModelBase>())
+            foreach (var module in Slots.Select(s => s.Content).OfType<ModulePanelViewModelBase>())
             {
                 try { module.Detach(); }
                 catch { /* best-effort cleanup, see doc comment above */ }
             }
         }
 
+        /// <summary>Wraps a present-but-unsupported module. Uses the same
+        /// UnknownModuleViewModel as before; only the navigator label is new, and it's
+        /// deliberately short - the full explanation stays in the detail pane, since a
+        /// 200px navigator row can't carry "ProtoCore doesn't recognize its EEPROM
+        /// identity".</summary>
+        private static SlotViewModel BuildUnsupportedSlot(int slot, ProtoModId moduleId)
+        {
+            var circuitCode = ProtoModBoardCatalog.Entries.FirstOrDefault(e => e.Id == moduleId)?.CircuitCode;
+            var label = moduleId == ProtoModId.Unknown
+                ? "Unrecognized board"
+                : circuitCode ?? $"0x{(ushort)moduleId:X4}";
+
+            return new SlotViewModel(slot, new UnknownModuleViewModel(moduleId), moduleId, SlotState.Unsupported, label);
+        }
+
+        /// <summary>Keeps the detail pane pointed somewhere sensible after a hot-swap:
+        /// the same physical slot if it's still worth showing, otherwise the first
+        /// occupied one, otherwise slot 1. Without this, swapping a module while its
+        /// workspace is open leaves the right-hand side bound to a discarded view
+        /// model.</summary>
+        private void RestoreSelection()
+        {
+            int preferred = SelectedSlot?.Index ?? 0;
+
+            SelectedSlot =
+                Slots.FirstOrDefault(s => s.Index == preferred && s.IsOccupied)
+                ?? Slots.FirstOrDefault(s => s.IsOccupied)
+                ?? Slots.FirstOrDefault();
+        }
+
         private void ResetSlotsToEmpty()
         {
             DetachModulePanels();
-            Panels.Clear();
+            Slots.Clear();
             for (int i = 0; i < SlotCount; i++)
-                Panels.Add(new EmptySlotViewModel());
+                Slots.Add(SlotViewModel.Empty(i));
+
+            RestoreSelection();
 
             // Disconnected means the app no longer knows what's installed - which is a
             // different claim from "nothing is installed", so the Library drops back to
