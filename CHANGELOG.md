@@ -2419,3 +2419,98 @@ about the circuit), the answer-key gate and reveal still work, and a TOC click
 still scrolls its target into view (y=601 -> y=209). Confirmed by grep that no
 "E02" remains in any rendered learner content - the only occurrences left are
 the source filename and the notes explaining the typo.
+
+---
+
+### 50. Manual legibility pass, generated schematics, and a leaner Library
+
+**2026-08-31, 21:05 CDT**
+
+**Prompt:** six changes, plus one important clarification: the Word manuals
+supplied for integration are **reference material for the kind of content
+wanted, not sources of truth** - their grouping should be followed but the
+content need not be. The changes: (1) indent body text under each section
+heading; (2) highlight the section currently being read in the table of
+contents as you scroll; (3) fewer sections - the E05 content read as sporadic
+rather than as an educational flow; (4) pull schematics out of the KiCad PDFs
+in `Finished Modules`, circuit only, no border or title block, minimal
+margins, linked from the top of the manual; (5) drop the Library's "Try this"
+section entirely, since the Library is a marketing/discovery surface and
+project prompts belong in the manuals; (6) add a Library search over module
+name and circuit code.
+
+**Purpose:** Make the manual readable rather than merely complete, and make
+the Library browsable rather than scrollable.
+
+**The clarification resolved the conflict from entries 48-49.** With the Word
+manual reference-only, E05's in-app content was rewritten against the board
+that actually exists - open-loop, bit-banged PWM, 10 Î© sense resistor, no
+measurement path - keeping the reference document's structure and voice. That
+is a better manual than the transcription was: the real board teaches the
+difference between a value an instrument was *told* and one it *measured*,
+which the closed-loop version couldn't. All four discrepancy callouts are
+gone; `CalloutKind.Discrepancy` stays in the renderer's vocabulary because
+EVALUATION.md cites it as the mitigation for a real rollout risk.
+
+**Changes:**
+- `Models/Manual/ElectronicLoadManual.cs` - rewritten. **Five body sections
+  and two appendices**, down from eight and three: Setup absorbed "now try
+  this", Observations carries the value table, and the creative challenge and
+  reflection questions share a "Go further" section. The schematic left the
+  appendices entirely.
+- `Assets/Schematics/*.pdf` (new, all six boards) - exported with
+  `kicad-cli sch export pdf --exclude-drawing-sheet --no-background-color`,
+  which suppresses the border and title block. That still leaves the circuit
+  on an A4 page, and there is no PDF tooling on this machine (no Ghostscript,
+  qpdf or Python), so each was cropped by rewriting the page's `/MediaBox`
+  **padded to the same byte length** - which keeps every xref offset valid,
+  where inserting a `/CropBox` would not have. Bounds came from the matching
+  SVG export, whose geometry is plain-text millimetres. E05 went from
+  297x210mm to 235x84mm. Copied beside the .exe via the `.csproj`, opened in
+  the system PDF viewer rather than rendered in-app, since zooming a schematic
+  beside the window is what a real viewer is for.
+- `Models/Manual/ManualBlocks.cs`, `ViewModels/ManualViewModel.cs`,
+  `Views/ManualView.xaml` - `ManualDocument.SchematicFile`, the resolved path,
+  and an "Open schematic (PDF)" button at the top of the manual. Failure to
+  launch a viewer degrades to a message rather than the global crash dialog.
+- `Views/ManualView.xaml` - body content indented 16px under its heading;
+  TOC entries sit back in secondary text until current, when they gain a teal
+  left bar and full-strength text.
+- `Views/ManualView.xaml.cs` - scroll-spy. On `ScrollChanged`, the last
+  section heading to have passed the top of the viewport becomes the selected
+  one. A `_syncing` guard stops the existing click-to-scroll behaviour and the
+  new scroll-to-select behaviour from retriggering each other, which would
+  otherwise have made the manual fight the mouse wheel.
+- `Views/LibraryPanel.xaml` - the "Try this" section and its idea template
+  removed; cards are meaningfully shorter.
+- `ViewModels/LibraryViewModel.cs`, `Views/LibraryPanel.xaml` - search over
+  name and circuit code, case-insensitive substring, ANDed with the family
+  filter. Placeholder text, a clear button, and a no-match message (a blank
+  grid reads as a broken tab). Following a "leads into" link now clears
+  *either* filter if it would hide the target, not just the family one.
+- `Converters/BoolToVisibilityConverters.cs`, `App.xaml` - added
+  `NullToVisibilityConverter`.
+
+**Verification.** UI Automation, Simulator mode: body text sits 16px right of
+its heading; scrolling to 15/35/60/85% moved the TOC highlight through
+sections 2 -> 3 -> 4 -> 5; the TOC lists 5 numbered sections plus 2
+appendices; the schematic button resolves to the cropped PDF shipped beside
+the .exe; no "TRY THIS" heading or quoted idea text remains in the Library;
+search "load" -> E05, "E0" -> E03+E05, "zzz" -> none plus the no-match
+message, clear -> all six restored.
+
+**Three self-inflicted failures worth recording, all now in `CLAUDE.md`:**
+- `--` inside an XML comment is illegal, so writing `--exclude-drawing-sheet`
+  into a `.csproj` comment is a hard `MSB4025` and the project won't load.
+- A `.ps1` saved as UTF-8 without a BOM is read as ANSI by Windows PowerShell
+  5.1, so non-ASCII characters in a test script arrive mangled. Three
+  assertions reported "element missing" purely because of this; all three
+  passed once matched by substring or built from codepoints.
+- (From the same session, already recorded) build-output greps must match
+  `error` broadly - `MC3000` and `MSB4025` match neither `error CS` nor
+  `error MSB`.
+
+**Note on branch:** the two Library changes are production work sitting on an
+evaluation branch, because `eval/in-app-manuals-e05` was cut from
+`feature/protomod-library` and that is where the Library lives. They should be
+cherry-picked back if the manuals evaluation is discarded.

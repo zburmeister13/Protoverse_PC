@@ -10,11 +10,12 @@ resolve manual-vs-hardware conflicts before a manual goes in-app, because
 rendering one beside live board state makes it more authoritative than a Word
 file ever was. Detail below.
 
-> **Still needs your decision before this branch goes further.** The supplied
-> Electronic Load manual describes a **closed-loop DAC/ADC design** where the
-> real board is **open-loop PWM with no measurement path**. (The module-code
-> conflict is resolved — "E02" was confirmed a typo for E05.) See "the finding
-> I didn't expect" below.
+> **Both hardware conflicts are now closed.** "E02" was confirmed a typo for
+> E05; and since the Word manuals are reference material rather than sources of
+> truth, E05's in-app content is now **written against the real open-loop
+> board** instead of transcribing the reference doc's closed-loop DAC/ADC
+> design. See "the finding I didn't expect" below — it still matters for
+> rollout.
 
 ---
 
@@ -29,8 +30,11 @@ file ever was. Detail below.
   block type. **Adding a manual adds data, not XAML.** That was the core claim
   to test, and it held.
 - The Electronic Load manual (`Models/Manual/ElectronicLoadManual.cs`) as
-  content, transcribed from `Electronic_Load_E02_Manual.docx` — a complete
-  12-section manual written against the template.
+  content — five body sections plus two appendices, written against the real
+  board's verified behaviour, using `Electronic_Load_E02_Manual.docx` as a
+  reference for structure and voice rather than for technical content.
+- Schematic PDFs for all six boards, exported from the KiCad sources and
+  cropped to the drawn circuit, linked from the top of the manual.
 - A rebuilt Slots tab: a left-hand navigator showing all three physical slots
   with a presence dot, and a workspace per slot with the module's live control
   panel docked above its manual.
@@ -143,7 +147,17 @@ talks to**, in two ways:
 | Module code | **E02** throughout | **E05** — EEPROM code, `ProtoModBoardCatalog`, and the folder `PC01_E05_ProtoMod_ElectronicLoad` all agree | **Resolved** — confirmed a typo. The transcription says E05; the `.docx` still says E02 and should be fixed at source, or a converter will reintroduce it. |
 | Circuit | Power MOSFET with op-amp feedback loop, **1 Ω** sense resistor, ProtoCore's **DAC** sets the target and its **ADC reads back live voltage and current** | **Open-loop**: bit-banged PWM into an op-amp, **10 Ω** sense resistor, **no ADC feedback path at all** | **Open** |
 
-The circuit one isn't a values nit. Sections 4 and 5 ask the learner to watch
+**How the circuit conflict was resolved:** the Word manuals are reference
+material for the *kind* of content wanted, not sources of truth. So E05's
+in-app manual is now written against the board that exists — open-loop, PWM,
+10 Ω, no measurement path — keeping the reference doc's structure and voice.
+That turned out better than a transcription would have been, because the real
+board teaches something the reference version couldn't: the difference between
+a value an instrument was *told* and a value it *measured*. The four
+discrepancy callouts are gone; there's nothing left to flag.
+
+The conflict is still worth recording, because the rollout lesson survives it.
+The circuit mismatch wasn't a values nit. Sections 4 and 5 ask the learner to watch
 voltage sag on screen while current holds steady — and this board revision can
 show neither quantity. It's the same constraint that led to removing the
 Electronic Load panel's chart rather than plotting numbers the hardware can't
@@ -189,12 +203,38 @@ goes away.
 
 What does **not** go away:
 
-- **The schematic.** Appendix C references `Protomod_ElectronicLoad.pdf` in
-  the hardware tree. No manual in this project has real figures — the Word
-  sources carry literal `[ figure / photo ]` markers — so a learner who wants
-  to see the circuit still opens a PDF. In-app manuals don't fix this;
-  drawing the figures does.
+- **A PDF viewer for the schematic** — though this got much better. See below:
+  the schematic is now generated, cropped, shipped with the app and one click
+  from the top of the manual, rather than being a path the learner has to go
+  find. It still opens in the system viewer, deliberately, because zooming and
+  panning a schematic beside the app is what a real viewer is for.
+- **Setup and figure photos.** The manuals carry literal `[ figure / photo ]`
+  markers and no such images exist. In-app manuals don't fix that; taking the
+  photos does.
 - **Word itself, for anyone authoring or editing.**
+
+### Schematics turned out to be a solved problem
+
+Worth calling out because it removes what I first listed as a permanent
+caveat. KiCad's CLI exports a schematic with the border and title block
+suppressed:
+
+```
+kicad-cli sch export pdf --exclude-drawing-sheet --no-background-color -o out.pdf in.kicad_sch
+```
+
+That still leaves the circuit floating on an A4 page. With no PDF tooling on
+this machine (no Ghostscript, qpdf or Python), the crop is done by rewriting
+the page's `/MediaBox` in place, **padded to the same byte length** so every
+xref offset in the file stays valid — an inserted `/CropBox` would have
+invalidated them. The content bounds come from the matching SVG export, whose
+geometry is plain-text millimetres.
+
+All six boards were processed this way and dropped from A4 to their actual
+circuit extents (E05: 235 × 84 mm, F01: 184 × 70 mm, and so on). The script is
+in this branch's history and takes seconds to re-run, so **schematics are a
+build step, not per-manual work** — which was not true when this document was
+first written.
 
 And one genuine risk of making things *worse*: **a partially-transcribed
 manual is worse than no in-app manual.** The learner opens the app, finds half
@@ -282,17 +322,23 @@ workspace needs to handle exercises spanning two ProtoMods.
 
 ## Verified
 
-Driven through UI Automation in Simulator mode: the navigator shows three
+Driven through UI Automation in Simulator mode. The navigator shows three
 slots with correct presence dots and "Manual available" only on the Electronic
-Load; selecting it renders the header (Explorers Series · Module E05), the
-metadata row (Intermediate / 45–60 min / Simple LED (F02)), the provenance
-note, and all 11 TOC entries; 2 Tech notes, 1 Observe prompt, 2 figure
-placeholders, 4 discrepancy callouts, the reassurance callout and 0
-placeholders (this manual is complete) render; 13 checkboxes and 15 text
-fields present; typing into a value-table cell and ticking a step both work;
-"Reveal answers" removes the gate and shows the real Appendix A answer key; a
-TOC click scrolls the target section to y=188; a slot with no manual shows the
-explanatory placeholder instead.
+Load; selecting it renders the header, metadata row, provenance note and TOC;
+typing into a value-table cell and ticking a step both work; "Reveal answers"
+removes the gate and shows the answer key; a slot with no manual shows the
+explanatory placeholder.
+
+The six changes requested on 2026-08-31 (evening), each verified:
+
+| # | Change | Verified |
+|---|---|---|
+| 1 | Indent body under section headings | body text sits 16 px right of its heading |
+| 2 | TOC tracks the section being read | scrolling to 15/35/60/85% moved the highlight through sections 2 → 3 → 4 → 5 |
+| 3 | Fewer, better-grouped sections | 8 body + 3 appendices → **5 body + 2 appendices** |
+| 4 | Schematic PDF linked at top | button present, resolves to the cropped `E05_schematic.pdf` shipped beside the exe |
+| 5 | Drop "Try this" from Library cards | no "TRY THIS" heading and no quoted idea text remains |
+| 6 | Library search by name or code | "load" → E05; "E0" → E03+E05; "zzz" → none, with a no-match message; clear restores all six |
 
 One process note worth recording: an intermediate build failed with a XAML
 `error MC3000` that a too-narrow grep (`error CS|error MSB`) hid, so one round

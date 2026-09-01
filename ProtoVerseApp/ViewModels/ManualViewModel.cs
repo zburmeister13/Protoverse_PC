@@ -1,5 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -131,6 +135,49 @@ namespace ProtoVerseApp.ViewModels
         public IReadOnlyList<ManualSectionViewModel> Appendices { get; }
 
         public bool HasPlaceholders => Document.PlaceholderCount > 0;
+
+        /// <summary>Full path to this module's schematic PDF beside the executable, or
+        /// null if the manual declares none or the file didn't ship.</summary>
+        public string? SchematicPath
+        {
+            get
+            {
+                if (Document.SchematicFile == null)
+                    return null;
+
+                var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Schematics", Document.SchematicFile);
+                return File.Exists(path) ? path : null;
+            }
+        }
+
+        public bool HasSchematic => SchematicPath != null;
+
+        /// <summary>Opens the schematic in whatever the system uses for PDFs. The app
+        /// deliberately doesn't render the PDF itself: a schematic is something a
+        /// learner wants to zoom, pan and keep open beside the app, which a dedicated
+        /// viewer already does far better than an embedded control would.</summary>
+        [RelayCommand]
+        private void OpenSchematic()
+        {
+            var path = SchematicPath;
+            if (path == null)
+                return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
+            {
+                // No PDF handler registered, or the shell refused. Not worth a crash
+                // dialog over a reference document - the path is shown in the tooltip,
+                // so the learner can still open it by hand.
+                SchematicError = "Couldn't open the schematic - no PDF viewer is associated with .pdf files.";
+            }
+        }
+
+        [ObservableProperty]
+        private string? _schematicError;
 
         public string PlaceholderWarning =>
             $"{Document.PlaceholderCount} section(s) of this manual haven't been written yet and show as placeholders.";

@@ -663,6 +663,16 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   test while the script reported results as if they were current. At least
   three error prefixes are in play in this project (`CS`, `MSB`, `MC`), so
   filter on `error` and `Build FAILED`, not on a list you think is complete.
+- **`--` cannot appear inside any XML comment, including in the `.csproj`.**
+  Writing a CLI flag like `--exclude-drawing-sheet` into an MSBuild comment is
+  a hard `error MSB4025` and the project won't load at all. Reword to name the
+  option without the dashes.
+- **A `.ps1` written as UTF-8 without a BOM is read as ANSI by Windows
+  PowerShell 5.1**, so any non-ASCII character in the script (Ω, ✕, ◱) arrives
+  mangled and string comparisons against UI text silently fail. This produced
+  three bogus "element missing" results in one test run. Either keep test
+  scripts ASCII-only and match on substrings, or build the characters from
+  their codepoints (`[char]0x03A9`).
 - **A XAML comment cannot go inside an element's attribute list.** Putting one
   between attributes of the `<Window ...>` tag is a hard `MC3000` parse error
   ("Name cannot begin with the '<' character") — obvious in hindsight, easy to
@@ -691,3 +701,10 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   tools). If a restructure needs to remove that directory, move its *contents*
   elsewhere and leave the empty shell for the user to delete after closing/
   reopening VS Code, rather than fighting the lock.
+
+- **PowerShell variable names are case-insensitive**, so a `$sources` hashtable
+  and a `$SourceRoot`-style parameter are fine, but `$sources` and `$Sources`
+  are the *same variable* - assigning one silently destroys the other. Cost a
+  debugging round in `tools/crop_schematics.ps1` when a hashtable overwrote the
+  path parameter it was meant to be joined against, and the script then did
+  nothing at all without erroring visibly.

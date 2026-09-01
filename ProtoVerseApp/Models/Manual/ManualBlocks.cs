@@ -130,11 +130,16 @@ namespace ProtoVerseApp.Models.Manual
     /// UI. Non-optional on purpose: this project does not ship module content that
     /// can't say where it came from, and a manual assembled partly from placeholders
     /// has to admit it.</param>
+    /// <param name="SchematicFile">File name of this module's schematic PDF under
+    /// `Assets/Schematics/`, or null if none has been exported. Linked from the top of
+    /// the manual rather than buried in an appendix - it's the reference a learner
+    /// reaches for mid-task, not something read once in order.</param>
     public record ManualDocument(
         string ModuleCode,
         ManualHeader Header,
         IReadOnlyList<ManualSection> Sections,
-        string SourceNote)
+        string SourceNote,
+        string? SchematicFile = null)
     {
         /// <summary>How many placeholder callouts this manual contains - i.e. how much
         /// of it is scaffolding rather than written content. Surfaced in the UI so a

@@ -29,20 +29,6 @@
                     Background="{StaticResource AccentBlueBrush}"/>
         </DataTemplate>
 
-        <!-- One project prompt. The source label is shown, not hidden, because these
-             are quoted from a real manual rather than generated - the provenance is
-             part of what makes them trustworthy. -->
-        <DataTemplate x:Key="IdeaTemplate">
-            <StackPanel Margin="0,0,0,7">
-                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12">
-                    <Run Text="•  " Foreground="{StaticResource AccentGreenBrush}"/><Run Text="{Binding Text, Mode=OneWay}"/>
-                </TextBlock>
-                <TextBlock Text="{Binding Source, Mode=OneWay}" Margin="14,1,0,0"
-                           FontSize="10" FontStyle="Italic" TextWrapping="Wrap"
-                           Foreground="{StaticResource TextSecondaryBrush}"/>
-            </StackPanel>
-        </DataTemplate>
-
         <!-- One catalog card. -->
         <DataTemplate x:Key="LibraryCardTemplate" DataType="{x:Type vm:LibraryEntryViewModel}">
             <!-- 385 + 12 margin = 397 per card, so two columns fit the ~834px the list
@@ -171,15 +157,10 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Ideas -->
-                        <TextBlock Text="TRY THIS" FontSize="10" FontWeight="Bold" Margin="0,14,0,5"
-                                   Foreground="{StaticResource TextSecondaryBrush}"/>
-                        <ItemsControl ItemsSource="{Binding Ideas}" ItemTemplate="{StaticResource IdeaTemplate}"
-                                      Visibility="{Binding HasIdeas, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                        <TextBlock Text="Project ideas for this ProtoMod are coming soon - its manual hasn't been written yet."
-                                   TextWrapping="Wrap" FontSize="11" FontStyle="Italic"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   Visibility="{Binding HasIdeas, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                        <!-- No "Try this" section here by design. Project prompts are
+                             the manual's job; the Library is a discovery surface, and
+                             carrying three quoted exercises per card made it long
+                             enough to scroll rather than browse. -->
 
                         <!-- Next steps -->
                         <TextBlock Text="LEADS INTO" FontSize="10" FontWeight="Bold" Margin="0,14,0,5"
@@ -313,18 +294,53 @@
             <TextBlock Text="{Binding KitSummary}" FontSize="11" Margin="0,4,0,0"
                        Foreground="{StaticResource AccentTealBrush}"/>
 
-            <!-- Family filter. Three families exist (F/E/A - see ProtoModSeries), so a
-                 flat row of buttons beats a dropdown: every option is visible at once
-                 and one click away, and the counts show how the catalog splits. -->
-            <ItemsControl ItemsSource="{Binding SeriesFilters}" ItemTemplate="{StaticResource SeriesFilterTemplate}"
-                          Margin="0,10,0,0">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
+            <!-- Family filter + search, on one row. Three families exist (F/E/A - see
+                 ProtoModSeries), so a flat row of buttons beats a dropdown: every
+                 option is visible at once and one click away, and the counts show how
+                 the catalog splits. Search matches module name and circuit code only,
+                 and ANDs with the family filter. -->
+            <Grid Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <ItemsControl Grid.Column="0" ItemsSource="{Binding SeriesFilters}"
+                              ItemTemplate="{StaticResource SeriesFilterTemplate}"
+                              VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+
+                <Grid Grid.Column="1" Width="230" VerticalAlignment="Center">
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="8,4,26,4" FontSize="12"/>
+                    <!-- Placeholder text: shown only while the box is empty, and made
+                         hit-transparent so clicking it still focuses the TextBox. -->
+                    <TextBlock Text="Search name or code..." FontSize="12" Margin="9,0,0,0"
+                               VerticalAlignment="Center" IsHitTestVisible="False"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Visibility="{Binding HasSearchText, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                    <Button Content="✕" Command="{Binding ClearSearchCommand}"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Margin="0,0,4,0" Padding="5,1" FontSize="10"
+                            Background="Transparent"
+                            Foreground="{StaticResource TextSecondaryBrush}"
+                            ToolTip="Clear search"
+                            Visibility="{Binding HasSearchText, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                </Grid>
+            </Grid>
         </StackPanel>
+
+        <!-- Empty state. Without this a search that matches nothing leaves a blank
+             panel, which reads as a broken tab rather than a search with no hits. -->
+        <TextBlock DockPanel.Dock="Top" Text="{Binding NoMatchesMessage}" Margin="4,20,4,0"
+                   FontStyle="Italic" TextWrapping="Wrap"
+                   Foreground="{StaticResource TextSecondaryBrush}"
+                   Visibility="{Binding HasNoMatches, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
         <ListBox x:Name="CardList"
                  ItemsSource="{Binding EntriesView}"

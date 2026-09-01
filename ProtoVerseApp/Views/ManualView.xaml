@@ -266,7 +266,7 @@
                 <!-- Spoiler gate. The template forbids anything spoiling an answer from
                      appearing before the follow-up questions, so the answer key opts
                      into this rather than merely sitting further down the page. -->
-                <Border Padding="14" CornerRadius="5" Margin="0,0,0,8"
+                <Border Padding="14" CornerRadius="5" Margin="16,0,0,8"
                         Background="{StaticResource BgBrush}"
                         BorderBrush="{StaticResource AccentOrangeBrush}" BorderThickness="1"
                         Visibility="{Binding ShowRevealButton, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -279,7 +279,10 @@
                     </StackPanel>
                 </Border>
 
-                <ItemsControl ItemsSource="{Binding Blocks}"
+                <!-- Body is indented under its heading. The section titles then form a
+                     clear left edge to scan down, and long runs of prose stop butting
+                     against the same margin as the headings that organise them. -->
+                <ItemsControl ItemsSource="{Binding Blocks}" Margin="16,0,0,0"
                               Visibility="{Binding ShowContent, Converter={StaticResource BoolToVisibilityConverter}}"/>
             </StackPanel>
         </DataTemplate>
@@ -304,8 +307,14 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="row" Padding="7,4" CornerRadius="3" Margin="0,0,0,1"
-                                            Background="Transparent">
+                                    <!-- The left bar marks the section currently being
+                                         read - the scroll handler keeps selection in
+                                         sync with the body, so this is a position
+                                         indicator, not just a click target. It needs to
+                                         be distinguishable from mere hover. -->
+                                    <Border x:Name="row" Padding="7,4" CornerRadius="0,3,3,0" Margin="0,0,0,1"
+                                            Background="Transparent"
+                                            BorderBrush="Transparent" BorderThickness="2,0,0,0">
                                         <ContentPresenter/>
                                     </Border>
                                     <ControlTemplate.Triggers>
@@ -314,6 +323,7 @@
                                         </Trigger>
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter TargetName="row" Property="Background" Value="{StaticResource SurfaceAltBrush}"/>
+                                            <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource AccentTealBrush}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -326,8 +336,15 @@
                         <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="11">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
                                     <Style.Triggers>
+                                        <!-- Current section reads at full strength; the
+                                             rest sit back, so the eye lands on where
+                                             you are without having to hunt. -->
+                                        <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </DataTrigger>
                                         <!-- Appendices read as secondary in the TOC:
                                              reachable, but not part of the learner
                                              flow. -->
@@ -345,7 +362,8 @@
         </DockPanel>
 
         <ScrollViewer x:Name="ManualScroller" Grid.Column="1" VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
+                      HorizontalScrollBarVisibility="Disabled"
+                      ScrollChanged="OnManualScrolled">
             <StackPanel Margin="0,0,10,0">
 
                 <!-- Header block: series / code / name / one-liner / metadata row -->
@@ -380,6 +398,23 @@
                                    Foreground="{StaticResource TextPrimaryBrush}"/>
                     </StackPanel>
                 </ItemsControl>
+
+                <!-- Schematic, linked from the top rather than buried in an appendix:
+                     it's the reference a learner reaches for mid-task, not something
+                     read once in order. Opens in the system PDF viewer so it can sit
+                     beside the app, zoomed. -->
+                <StackPanel Orientation="Horizontal" Margin="0,14,0,0"
+                            Visibility="{Binding HasSchematic, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Button Content="◱  Open schematic (PDF)" Command="{Binding OpenSchematicCommand}"
+                            FontSize="11" Padding="11,5"
+                            ToolTip="{Binding SchematicPath}"/>
+                    <TextBlock Text="Circuit only - no border or title block" FontSize="10" FontStyle="Italic"
+                               VerticalAlignment="Center" Margin="10,0,0,0"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                </StackPanel>
+                <TextBlock Text="{Binding SchematicError}" TextWrapping="Wrap" FontSize="10" Margin="0,4,0,0"
+                           Foreground="{StaticResource AccentOrangeBrush}"
+                           Visibility="{Binding SchematicError, Converter={StaticResource NullToVisibilityConverter}}"/>
 
                 <!-- Provenance, always shown - a manual should be able to say where its
                      content came from whether or not it's finished. The unfinished

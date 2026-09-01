@@ -20,6 +20,19 @@ namespace ProtoVerseApp.Converters
             value is Visibility.Visible;
     }
 
+    /// <summary>non-null/non-empty -&gt; Visible, null or empty -&gt; Collapsed. For
+    /// occasional messages (e.g. a failed schematic open) that have no separate "is
+    /// there a message" flag.</summary>
+    public class NullToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+            value is string s ? (string.IsNullOrWhiteSpace(s) ? Visibility.Collapsed : Visibility.Visible)
+                              : (value == null ? Visibility.Collapsed : Visibility.Visible);
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+            throw new NotSupportedException();
+    }
+
     /// <summary>false -&gt; Visible, true -&gt; Collapsed. Used for the Library's
     /// "…coming soon" placeholders, which appear exactly where the real content is
     /// absent.</summary>

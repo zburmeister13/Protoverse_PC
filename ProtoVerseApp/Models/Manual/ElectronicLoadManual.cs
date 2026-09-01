@@ -3,276 +3,218 @@ using System.Collections.Generic;
 namespace ProtoVerseApp.Models.Manual
 {
     /// <summary>
-    /// The Electronic Load manual, as in-app content.
+    /// The Electronic Load (E05) manual, as in-app content.
     ///
-    /// SOURCE: `Electronic_Load_E02_Manual.docx`, supplied 2026-08-31. Transcribed
-    /// faithfully - every paragraph, callout, question and answer below is that
-    /// document's wording, not this app's. It is written against the Gen2 template and
-    /// is complete: all twelve sections, no gaps. (An earlier version of this file was
-    /// six-twelfths placeholder, assembled from this repo's own notes because no manual
-    /// existed at the time.)
+    /// WRITTEN AGAINST THE REAL BOARD. `Electronic_Load_E02_Manual.docx` was supplied
+    /// as a reference for the *kind* of material wanted - tone, pedagogy, the mix of
+    /// theory and hands-on - and explicitly not as a source of truth (user, 2026-08-31).
+    /// That matters here, because that document describes a closed-loop design with a
+    /// power MOSFET, a 1 Ω sense resistor, and DAC/ADC readback of live voltage and
+    /// current. The board this app actually talks to is open-loop: a bit-banged PWM
+    /// signal into an op-amp, a 10 Ω sense resistor, no ADC anywhere on the current
+    /// path. So the structure and voice below follow the reference; every technical
+    /// claim describes the hardware that exists.
     ///
-    /// RESOLVED - the module code. The source `.docx` says "E02" throughout; the user
-    /// confirmed (2026-08-31) that this is a typo and the module is E05, which is what
-    /// every other source in the project already said: `ProtoModBoardCatalog` maps
-    /// <see cref="ProtoModId.ElectronicLoad"/> to circuit code "E05", the hardware
-    /// lives in `Finished Modules/PC01_E05_ProtoMod_ElectronicLoad`, and the Library
-    /// catalog lists it as E05. The transcription below therefore says E05 wherever the
-    /// document said E02 - the one place this file knowingly departs from its source,
-    /// and only because the departure was confirmed.
+    /// It also means this manual can teach the thing that's actually interesting about
+    /// this board - the gap between a commanded value and a measured one - instead of
+    /// asking the learner to watch readouts it cannot produce.
     ///
-    /// **The Word document still has the typo.** It should be corrected at the source,
-    /// or a future `.docx` -> content converter will faithfully reintroduce E02. This
-    /// is also the exact class of error the converter should validate for: a manual
-    /// whose stated module code matches no board in `ProtoModBoardCatalog`.
+    /// SOURCES for the technical content, all of it already verified against real
+    /// hardware elsewhere in this project: CLAUDE.md's "Electronic Load's wire format
+    /// is settled" section, CHANGELOG entries 36-42 (including a full 1-300 mA sweep
+    /// against the bench board), and `ViewModels/ElectronicLoadViewModel.cs`.
     ///
-    /// STILL UNRESOLVED: THE MANUAL AND THE BOARD DESCRIBE DIFFERENT CIRCUITS. Flagged
-    /// here, and surfaced in the UI, rather than quietly reconciled - it needs a human
-    /// decision. This manual describes a
-    /// power MOSFET with an op-amp feedback loop, a 1 Ω sense resistor, and ProtoCore's
-    /// DAC setting the target while its ADC reads back live voltage and current for
-    /// on-screen monitoring. The board this app actually talks to is open-loop:
-    /// bit-banged PWM into an op-amp, a 10 Ω sense resistor, and no ADC feedback path
-    /// at all - which is why `ElectronicLoadViewModel` reports commanded current and
-    /// PWM duty rather than measurements, and why the user chose to remove that panel's
-    /// chart entirely rather than plot numbers the hardware cannot produce (CLAUDE.md;
-    /// CHANGELOG 36).
-    ///
-    /// This matters for the learner, not just for tidiness: sections 4 and 5 ask them
-    /// to watch voltage sag on screen while current holds steady, and this board
-    /// revision cannot show them either quantity. The manual's own Appendix C already
-    /// flags its component values as provisional, so the likeliest explanation is that
-    /// it describes an intended or revised board rather than the Rev01 hardware on the
-    /// bench - but that is a guess, and this project doesn't resolve hardware questions
-    /// by guessing.
-    ///
-    /// The <see cref="CalloutKind.Discrepancy"/> blocks below are the only text here
-    /// that isn't from the manual. They are attributed as app-side notes wherever they
-    /// appear.
+    /// DELIBERATELY FEWER SECTIONS than the template's twelve. The reference manual's
+    /// eight body sections plus three appendices made for a lot of headings on one
+    /// scroll; this is five body sections and two appendices, with Setup and "now try
+    /// this" merged, Observations carrying the value table, and the creative challenge
+    /// and reflection questions sharing one "Go further" section. The schematic moved
+    /// out of an appendix entirely and is linked from the top of the manual.
     /// </summary>
     public static class ElectronicLoadManual
     {
-        /// <summary>The app-side mismatch note, shown at the points where following the
-        /// manual would have the learner looking for something this board can't
-        /// display.</summary>
-        private static CalloutBlock HardwareMismatch(string detail) => new(
-            CalloutKind.Discrepancy,
-            detail + "  (Note from the ProtoVerse app, not from the manual.)",
-            "This manual doesn't match the board in your slot");
-
         public static ManualDocument Build() => new(
             ModuleCode: "E05",
+            SchematicFile: "E05_schematic.pdf",
             Header: new ManualHeader(
                 Series: "Explorers Series",
-                // E05, not the document's "E02" - confirmed typo, see the class remarks.
                 Code: "E05",
                 Name: "Electronic Load",
-                Tagline: "Draw a precise, adjustable current from any DC source, and watch feedback control keep it steady as voltage sags.",
+                Tagline: "Command a current and watch a real circuit obey - then find out why the board can't tell you whether it did.",
                 Difficulty: "Intermediate",
                 Time: "45-60 min",
                 Prerequisites: "Simple LED (F02)"),
-            SourceNote: "Transcribed from Electronic_Load_E02_Manual.docx (2026-08-31). The document's module code \"E02\" is a confirmed typo and is shown here as E05. One conflict with the physical board is still unresolved and flagged in-line: the manual describes a closed-loop DAC/ADC design, where the board this app talks to is open-loop PWM with no measurement path.",
+            SourceNote: "Written against the board's verified behaviour (CLAUDE.md, CHANGELOG 36-42, ElectronicLoadViewModel.cs). Electronic_Load_E02_Manual.docx was used as a reference for structure and tone, not for technical content - it describes a different, closed-loop design.",
             Sections: new[]
             {
-                // ---------------------------------------------------------- 1
+                // ============================================================== 1
                 new ManualSection("overview", "1. Overview", new ManualBlock[]
                 {
-                    new ParagraphBlock("Module name: Electronic Load (E05)"),
                     new SubheadingBlock("Core concept"),
                     new ParagraphBlock(
-                        "A power MOSFET, driven by an op-amp feedback loop, can act as an adjustable current sink - pulling a precise, chosen current from any DC source and turning the power into heat, so you can test how that source behaves under real load."),
+                        "An electronic load is a resistor you set in software. Instead of choosing a resistance and letting Ohm's law decide the current, you name the current you want and the circuit arranges itself to draw it - turning the power it pulls into heat. That makes it a test instrument: it lets you ask a power source \"what do you do when I demand this much from you?\""),
                     new BulletsBlock(new[]
                     {
-                        "A power MOSFET “pass element” that behaves like a resistor whose value you set electronically, not by swapping parts",
-                        "A current-sense resistor and op-amp feedback loop that hold the load current steady even as the input voltage changes",
-                        "ProtoCore's DAC sets the target current; ProtoCore's ADC reads back live voltage and current for on-screen monitoring",
-                        "A heatsinked layout rated for modest continuous power dissipation - enough to safely test small batteries, USB supplies, and voltage regulators",
+                        "You command a current from 0 to 300 mA, in milliamps, from software.",
+                        "ProtoCore generates that command as a PWM signal, which an op-amp turns into a real current through a 10 Ω sense resistor.",
+                        "The board is open-loop on this revision: nothing on it measures what the current actually is.",
+                        "So it reports back the current you asked for and the PWM duty cycle it is driving - and never a measurement.",
                     }),
-                    HardwareMismatch(
-                        "The third bullet describes a board that measures what it is drawing. This one doesn't: it is open-loop, with no ADC on the current path, so the app can show you the current you asked for and the PWM duty it is driving - never a reading. Expect no live voltage or current anywhere in the panel above."),
                     new ParagraphBlock(
-                        "By connecting this ProtoMod to any DC power source and watching how it holds current constant while voltage sags underneath it, you'll directly observe source impedance, power dissipation, and closed-loop feedback control - the same core ideas behind every real bench electronic load and battery tester."),
+                        "That last bullet is the one worth sitting with, and it is what this module is really about. Most instruments tell you what they measured. This one tells you what it was told to do. Learning to notice that difference - and knowing when it matters - is a habit that will outlast this board."),
                 }),
 
-                // ---------------------------------------------------------- 2
-                new ManualSection("theory", "2. Background & theory", new ManualBlock[]
+                // ============================================================== 2
+                new ManualSection("how", "2. How it works", new ManualBlock[]
                 {
-                    new SubheadingBlock("What is an electronic load?"),
+                    new SubheadingBlock("Making an analog voltage without a DAC"),
                     new ParagraphBlock(
-                        "A resistor is a passive load: plug it into a source and the current it draws depends entirely on the source's voltage (Ohm's law, I = V / R). An electronic load flips that relationship around. Instead of a fixed resistance, you choose a target current, and the circuit actively adjusts its own effective resistance - moment to moment - to keep pulling exactly that much current, no matter what the source's voltage does."),
-                    new ParagraphBlock(
-                        "That's what makes it useful as a test instrument: it lets you ask a power source “what do you do when I demand this much current from you?” and get a clean, repeatable answer."),
+                        "ProtoCore has no analog output on this pin, so it fakes one. A PWM signal switches cleanly between 0 V and 3.3 V, thousands of times a second. Spend 30% of each cycle high and the average value of that square wave is 30% of 3.3 V, or about 1 V. Filter away the switching and an averaged, steady-ish voltage is what remains - a voltage you set by choosing a ratio rather than by having a dedicated analog part."),
                     new CalloutBlock(CalloutKind.TechNote,
-                        "I_load = V_sense ÷ R_sense. With a 1 Ω sense resistor, 100 mV across it means 100 mA of load current. Power dissipated as heat: P = V_in × I_load - at 5 V and 200 mA, that's 1 W the MOSFET has to absorb.",
-                        "Tech note"),
-                    new SubheadingBlock("Constant current via feedback (the control loop)"),
+                        "The PWM runs at 5 kHz. It was raised from 1 kHz specifically to reduce ripple on the op-amp's filtered input - a faster switch is easier to average smoothly. The trade was duty-cycle resolution, kept affordable by holding the interrupt rate fixed.",
+                        "Tech note - why 5 kHz"),
+                    new SubheadingBlock("From voltage to current"),
                     new ParagraphBlock(
-                        "An op-amp compares two voltages: the voltage across the sense resistor (which tracks actual current) and a setpoint voltage coming from ProtoCore's DAC (which represents your target current). If actual current is too low, the op-amp drives the MOSFET's gate more open, letting more current through; if it's too high, it closes the gate down. This happens continuously and automatically - it's a negative feedback loop, the same principle behind cruise control or a thermostat, just applied to current instead of speed or temperature."),
+                        "That averaged voltage drives an op-amp, which forces the same voltage to appear across a 10 Ω sense resistor. Once you fix the voltage across a known resistance, you have fixed the current through it - Ohm's law, used in reverse from how it's usually taught. Change the duty cycle and you change the voltage; change the voltage and you change the current."),
                     new CalloutBlock(CalloutKind.TechNote,
-                        "The MOSFET's gate voltage is not something you set directly - it's whatever the op-amp decides, many thousands of times per second, to keep V_sense equal to your setpoint. You control the target; the loop finds the gate voltage that gets there.",
-                        "Tech note"),
-                    HardwareMismatch(
-                        "The board in your slot uses a 10 Ω sense resistor, not 1 Ω, and its setpoint comes from a bit-banged PWM signal rather than a DAC. Both tech notes above are worth understanding as theory; neither describes the numbers this hardware runs on."),
+                        "I = V ÷ R, with R = 10 Ω. To draw 100 mA you need 1.0 V across the sense resistor, which is a duty cycle of roughly 30% of a 3.3 V rail. In practice the duty comes out a little higher - see below.",
+                        "Tech note - the arithmetic"),
+                    new SubheadingBlock("Open loop, and what it costs"),
+                    new ParagraphBlock(
+                        "A closed-loop instrument measures its own output and corrects itself continuously - if the current drifts, it notices and pushes back. This board cannot. There is no sense amplifier feeding an ADC, no measurement of any kind on the current path. It computes a duty cycle from your request, drives it, and trusts the analog stage to do the rest."),
+                    new ParagraphBlock(
+                        "That trust is mostly justified, and firmware helps it along: rather than the textbook ratio, it applies a correction measured against real hardware, because the 3.3 V rail is never exactly 3.3 V and the op-amp is not ideal. But nothing in the loop closes. If the supply sags, if the resistor warms and drifts, if a connection is poor - the board neither knows nor tells you."),
+                    new CalloutBlock(CalloutKind.TechNote,
+                        "Firmware's calibration constants are CAL_SLOPE_MV_PER_MA = 9.3828 and CAL_OFFSET_MV = 32.906. They overshoot the naive formula on purpose, to compensate for a rail sitting below its nominal value. At the 300 mA maximum the duty reports 95%, not 100% - expected, not a fault.",
+                        "Tech note - real constants"),
                     new BulletsBlock(new[]
                     {
-                        "An electronic load doesn't supply power - it consumes it and converts it to heat, which is why it needs a heatsink.",
-                        "Feedback control (comparing a measured value to a setpoint, continuously) is what makes the current constant instead of Ohm's-law-dependent.",
-                        "Power = Voltage × Current isn't just a formula here - it's heat you can watch build up on the heatsink in real time.",
+                        "A duty cycle plus a filter is a serviceable substitute for a DAC when you only need a slow-moving voltage.",
+                        "Fixing a voltage across a known resistor is a way to fix a current - Ohm's law read backwards.",
+                        "Open loop means \"set and hope\". It is cheaper, simpler, and puts the burden of verification on you.",
+                        "A number an instrument reports is not automatically a number it measured.",
                     }, Heading: "Key takeaways"),
                 }),
 
-                // ---------------------------------------------------------- 3
-                new ManualSection("applications", "3. Real-world applications", new ManualBlock[]
-                {
-                    new ParagraphBlock(
-                        "Constant-current discharge testing is exactly how battery capacity ratings (mAh) are measured: discharge a cell at a known, steady current and time how long it takes to hit a cutoff voltage. Every battery datasheet you've ever seen was produced with a circuit doing what this ProtoMod does."),
-                    new ParagraphBlock(
-                        "Engineers use electronic loads to answer a simple but critical question about any power supply or voltage regulator: does it hold its output voltage steady when something actually draws current from it? A supply that looks perfect with nothing connected can sag badly under real load - and an electronic load is how you'd find that out before shipping a product."),
-                    new ParagraphBlock(
-                        "Reviewers and hobbyists use small programmable loads to check whether USB chargers and power banks actually deliver the current they claim on the box - a very common real-world use of exactly this circuit, at a slightly larger scale."),
-                    new ParagraphBlock("Let's get started!"),
-                }),
-
-                // ---------------------------------------------------------- 4
-                new ManualSection("setup", "4. Setup & testing", new ManualBlock[]
+                // ============================================================== 3
+                new ManualSection("setup", "3. Set up and try it", new ManualBlock[]
                 {
                     new ChecklistBlock(new[]
                     {
                         "Electronic Load (E05) ProtoMod board",
                         "ProtoCore board",
                         "USB cable + computer",
-                        "A DC power source to test - a AA/AAA battery, USB power bank, or bench supply, no higher than 5 V for this exercise",
-                        "Multimeter (optional, for cross-checking the app's voltage/current readout)",
+                        "A multimeter that can read DC current - not optional for this module, since the board reports no measurements of its own",
                     }, Heading: "You'll need"),
-                    new StepsBlock(new[]
-                    {
-                        new ManualStep("Insert the Electronic Load (E05) ProtoMod into any slot on your ProtoCore."),
-                        new ManualStep("Power the ProtoCore with USB-B."),
-                        new ManualStep("Open the ProtoVerse app (or use a serial monitor)."),
-                        new ManualStep("Click Identify slots and confirm “E05” appears in the correct slot."),
-                    }, Numbered: true, Heading: "Assembly steps"),
-                    HardwareMismatch(
-                        "The multimeter listed as optional above isn't, on this board revision: it's the only way to see the voltage and current this exercise asks you to watch. The panel above shows the current you commanded and the PWM duty being driven - neither is a measurement."),
-                    new FigureBlock("Figure 1 - Electronic Load board, input terminals and heatsink visible"),
+                    ManualBoilerplate.AssemblySteps("Electronic Load", "E05"),
+                    new FigureBlock("ProtoCore with the Electronic Load (E05) installed, multimeter in series with the load path"),
                     new StepsBlock(new[]
                     {
                         new ManualStep(
-                            "Connect a single AA battery (or similarly low-power source) to the Electronic Load's input terminals. In the app, set the target current to a low value - 50 mA - and enable the load.",
-                            Observe: "The app should immediately show a current reading close to 50 mA and a voltage reading close to the battery's normal resting voltage (about 1.5 V for a fresh AA). If current reads near zero, check polarity and that the load is enabled."),
+                            "Command 10 mA and click Apply. Watch the panel above this manual rather than the box you typed into.",
+                            Observe: "Two values come back: the current, echoed exactly as you sent it, and a duty percent. Work out what duty the formula in Section 2 predicts for 10 mA. Is the reported figure higher or lower?"),
                         new ManualStep(
-                            "Raise the current setpoint in steps - 50 mA, then 100 mA, then 200 mA - pausing at each step. Change only the current setpoint; leave everything else connected exactly as it was."),
+                            "Step up through 50 mA, 100 mA and 150 mA, pausing at each. Note the duty reported at every step."),
                         new ManualStep(
-                            "Before increasing current once more, predict what you think will happen to the voltage reading. Then raise the setpoint and check whether your prediction held."),
+                            "Before you send the next one, predict the duty yourself. Then send it and check.",
+                            Observe: "Is the gap between your prediction and the reported figure constant, or does it grow with current? That gap is the calibration correction, and its shape tells you what kind of error it was written to cancel."),
+                        new ManualStep(
+                            "Command 300 mA, then try 400 mA.",
+                            Observe: "300 mA is the ceiling. Open the Traffic Log at the bottom of the window and look at what came back from the 400 mA attempt - the board rejects it outright rather than quietly clamping. Silent clamping would have been the more dangerous design. Why?"),
+                        new ManualStep(
+                            "Now put the meter in the load path and measure the actual current at two or three settings. Compare each reading against the number you commanded."),
                     }, Numbered: true, Heading: "Now try this"),
                 }),
 
-                // ---------------------------------------------------------- 5
-                new ManualSection("observations", "5. Observations & results", new ManualBlock[]
+                // ============================================================== 4
+                new ManualSection("observations", "4. What you should see", new ManualBlock[]
                 {
                     new BulletsBlock(new[]
                     {
-                        "Voltage drops as current increases, even though the current itself stays close to whatever you set it to.",
-                        "The heatsink and MOSFET area of the board become noticeably warm at higher current settings - that warmth is the power you calculated in the Tech note, made physical.",
-                        "The current reading tracks your setpoint closely across the whole range you tried, not just at one value.",
+                        "The commanded current always echoes back exactly as sent - it is your own number returning to you.",
+                        "The reported duty rises by roughly 1% for every 3 mA commanded.",
+                        "At 300 mA the duty reports 95%, not 100%.",
+                        "Commanding more than 300 mA produces an explicit error, not a clamped value.",
+                        "Your meter reads close to the commanded current, but almost certainly not exactly.",
                     }, Heading: "What you should see"),
                     new SubheadingBlock("Why it works"),
                     new ParagraphBlock(
-                        "Every real power source has some internal resistance - think of a battery as a perfect voltage source with a small resistor built in. When you draw more current, more voltage gets “lost” across that internal resistance before it ever reaches your load, so the voltage you measure at the terminals sags. This isn't a flaw in the Electronic Load; it's the Electronic Load successfully revealing a property of the source that was always there but invisible with nothing connected."),
+                        "Every one of those observations except the last comes from the command path alone. Firmware takes your current, runs it through the calibration to get a duty, drives the PWM at that duty, and reports both numbers back. Nothing in that round trip touches the load. It can reject 400 mA without measuring anything, because the limit is a constant it already knows."),
                     new ParagraphBlock(
-                        "The reason the current itself stays steady through all of this is the feedback loop from Section 2: the op-amp is continuously re-adjusting the MOSFET's gate to compensate for the changing voltage, so that V_sense - and therefore I_load - keeps matching your setpoint regardless of what the source's voltage is doing underneath it."),
-                    new ParagraphBlock(
-                        "Guidance: log each setpoint you tried alongside the voltage the app reported - tested current / predicted voltage / observed voltage / notes - as a simple table in your own notebook or the app if it supports one. That table becomes the evidence for Section 6."),
-                    // The manual asks for exactly this table and wonders whether the app
-                    // supports one. It does.
+                        "The last observation is the only one that required an instrument, and it is the only one that tells you what the circuit actually did. Everything else was the board describing its own intentions."),
                     new ValueTableBlock(
-                        Id: "sag-log",
-                        Columns: new[] { "Tested current", "Predicted voltage", "Observed voltage", "Notes" },
+                        Id: "duty-sweep",
+                        Columns: new[] { "Commanded", "Duty you predict", "Duty reported", "Current you measure", "Notes" },
                         Rows: new[]
                         {
+                            new[] { "10 mA" },
                             new[] { "50 mA" },
                             new[] { "100 mA" },
-                            new[] { "200 mA" },
+                            new[] { "150 mA" },
+                            new[] { "300 mA" },
                         },
-                        Heading: "Log your readings"),
+                        Heading: "Record what you find"),
+                    new CalloutBlock(CalloutKind.Observe,
+                        "Where your measured current and your commanded current disagree, the board will never say so. Which of the two would you write down as \"the current\", and what would you have to do to earn the right to trust it?"),
                 }),
 
-                // ---------------------------------------------------------- 6
-                new ManualSection("challenge", "6. Creative challenge", new ManualBlock[]
+                // ============================================================== 5
+                new ManualSection("further", "5. Go further", new ManualBlock[]
                 {
+                    new SubheadingBlock("Creative challenge"),
                     new ParagraphBlock(
-                        "Using only what you learned in this ProtoMod, design a short experiment that measures some real characteristic of a power source - not just its current or voltage, but something you have to derive from a series of readings."),
+                        "Design a short experiment that measures something the board doesn't report - a property you have to derive from a series of readings rather than read off a screen."),
                     new BulletsBlock(new[]
                     {
-                        "Estimate a battery's internal resistance by taking voltage readings at two different current setpoints and using the change in voltage divided by the change in current (ΔV / ΔI).",
-                        "Build a simple runtime/capacity test: hold the load at a fixed current, time how long the source takes to sag to a chosen cutoff voltage, and calculate the capacity in mAh from the current and the time.",
+                        "Calibrate the board against your meter: sweep the commanded current, record what you actually measure at each point, and produce a correction curve. How linear is the error?",
+                        "Find where it stops behaving. Push toward 300 mA and watch whether measured current keeps tracking commanded current as faithfully at the top of the range as at the bottom.",
+                        "Work out the duty resolution by hand: command currents 1 mA apart and find the smallest change that moves the reported duty at all. What does that tell you about the finest current step this board can really make?",
                     }),
-                    new CalloutBlock(CalloutKind.Reassurance,
-                        "Both ideas above are starting points, not the target. What matters is that your method is your own reasoning about cause and effect - not whether it matches anyone else's numbers.",
-                        "There's no single correct answer here"),
-                }),
-
-                // ---------------------------------------------------------- 7
-                new ManualSection("questions", "7. Follow-up & reflection questions", new ManualBlock[]
-                {
+                    ManualBoilerplate.NoSingleCorrectAnswer,
+                    new SubheadingBlock("Follow-up & reflection questions"),
                     new QuestionsBlock("reflection", new[]
                     {
-                        "What component in this ProtoMod acts as the adjustable “resistor,” and what does it do with the power it consumes?",
-                        "What role does the current-sense resistor play in the control loop?",
-                        "Why does a power source's voltage drop as you draw more current from it, even though the Electronic Load is asking for a constant current, not a changing one?",
-                        "Why might a full-size benchtop electronic load need a heatsink rated for tens or hundreds of watts, while this ProtoMod's is much smaller?",
-                        "If you were designing a larger electronic load capable of testing something like a car battery, what would have to change about this design, and why?",
+                        "The board reports a current and a duty cycle. Which of those two is a measurement, and which is a restatement of what you asked for?",
+                        "Why does fixing a voltage across a known resistor also fix the current through it?",
+                        "Firmware's calibration deliberately overshoots the textbook duty for a given current. What real-world imperfection is that overshoot compensating for?",
+                        "This board rejects a 400 mA request instead of clamping it to 300 mA. Why might an explicit refusal be safer than a silent adjustment?",
+                        "If you were asked to make this a closed-loop instrument that could report its true current, what would you have to add - and what would become possible that isn't now?",
                     }),
                 }),
 
-                // ---------------------------------------------------------- 8
-                new ManualSection("next", "8. Future ProtoMods for you", new ManualBlock[]
-                {
-                    new ParagraphBlock(
-                        "Once you're comfortable pulling a controlled current and reading back the result, the DDS / Sinusoid Generator (A01) is a natural next step: it moves from a control loop that holds a value steady to one that actively generates a changing signal, and both ProtoMods share the same instinct for using ProtoCore's DAC/ADC to set and measure real electrical quantities. Combining the two later - driving a changing signal into a circuit while the Electronic Load holds a steady demand on its output - is exactly the kind of interaction ProtoMods are designed to build toward."),
-                }),
-
-                // ---------------------------------------------------- Appendix A
+                // ====================================================== Appendix A
                 new ManualSection("appendix-a", "Appendix A - Answer key", new ManualBlock[]
                 {
-                    new ParagraphBlock("Attempt the Follow-Up Questions before reading this."),
+                    new ParagraphBlock("Attempt the reflection questions before reading this."),
                     new BulletsBlock(new[]
                     {
-                        "The power MOSFET acts as the adjustable resistor. It doesn't reuse or store the power it consumes - it dissipates it as heat, which is why the board needs a heatsink.",
-                        "The current-sense resistor converts the load current into a small, measurable voltage. The op-amp compares that voltage to your setpoint to decide how much to open or close the MOSFET - without it, there'd be nothing for the feedback loop to measure.",
-                        "Every real source has some internal resistance. Drawing more current means more voltage is lost across that internal resistance before it reaches the terminals, so terminal voltage sags - even though the current itself is being held constant by the feedback loop.",
-                        "Power dissipation scales with both voltage and current (P = V × I). A benchtop load tests supplies at much higher voltages and currents than this ProtoMod, so it has to shed far more heat - hence the much larger heatsink (often with a fan).",
-                        "A car-battery-capable load would need higher-current-rated MOSFETs, a beefier current-sense path, active cooling instead of a passive heatsink, and safety features like reverse-polarity and over-temperature protection - all scaled-up versions of exactly what's already on this board.",
+                        "Neither is a measurement of the load. The current is your own commanded value echoed back; the duty cycle is real in that it is genuinely what firmware is driving, but it describes the board's output, not the current actually flowing.",
+                        "Ohm's law relates the three quantities, so fixing any two fixes the third. The resistor's value is fixed by construction and the op-amp holds the voltage across it fixed, which leaves the current with only one value it can take.",
+                        "Mainly a supply rail that sits below its nominal 3.3 V, plus non-ideal behaviour in the op-amp stage. A duty computed from an assumed 3.3 V would under-deliver against a rail that is actually lower, so the correction pushes it up.",
+                        "A clamped value would leave the caller believing they got what they asked for. An error makes the disagreement visible at the moment it happens, which is the only point at which it is cheap to notice - especially on a board that reports no measurements to contradict the assumption later.",
+                        "You would need a sense amplifier across the existing resistor feeding an ADC, and firmware to close the loop by comparing measurement to setpoint. That would make the board able to report true current, correct for drift and load changes on its own, and detect faults such as an open circuit - none of which it can do today.",
                     }),
                 }, IsAppendix: true, IsSpoiler: true),
 
-                // ---------------------------------------------------- Appendix B
+                // ====================================================== Appendix B
                 new ManualSection("appendix-b", "Appendix B - Facilitator notes", new ManualBlock[]
                 {
                     new SubheadingBlock("Timing guide"),
                     new ParagraphBlock(
-                        "About 45-60 minutes total. Learners new to reading a multimeter or interpreting sag under load tend to move slower through Section 4's stepped-current exercise - budget extra time there rather than in the theory sections, which most learners move through quickly if Simple LED (F02) is fresh."),
+                        "About 45-60 minutes. The stepped-current exercise in Section 3 takes longest, particularly for learners meeting a multimeter's current mode for the first time - budget time there rather than in the theory."),
                     new SubheadingBlock("Common misconceptions"),
                     new BulletsBlock(new[]
                     {
-                        "Thinking the Electronic Load “produces” current like a power supply does. It only sinks/consumes current - it can never push current into a source, only pull it out.",
-                        "Assuming voltage should stay perfectly constant regardless of load. Voltage sag under load is normal and expected for any real source; a source that never sags simply hasn't been tested hard enough yet.",
+                        "Reading the echoed current as a measurement. This is the central point of the module and it catches experienced engineers too - the number looks like telemetry because it arrives from the hardware.",
+                        "Expecting the load to push current into a source. It only sinks; it can pull current out of a source, never supply it.",
+                        "Assuming the reported duty is wrong because it doesn't match the textbook formula. The calibration overshoot is deliberate and documented.",
                     }),
                     new SubheadingBlock("Extension ideas"),
                     new BulletsBlock(new[]
                     {
-                        "Pair with the DDS / Sinusoid Generator ProtoMod to test a power supply's transient response - step the load current suddenly and watch (via ProtoCore's ADC) how quickly the supply's voltage recovers.",
-                        "Pair with the Accelerometer + Temperature ProtoMod to correlate heatsink temperature rise directly against calculated power dissipation over time.",
+                        "Have learners compare their own calibration curves. Boards and meters differ, and the spread is a good conversation about tolerance.",
+                        "Ask what a closed-loop version would cost in parts and complexity, then discuss why a teaching board might reasonably choose open loop anyway.",
                     }),
-                }, IsAppendix: true),
-
-                // ---------------------------------------------------- Appendix C
-                new ManualSection("appendix-c", "Appendix C - Schematic reference", new ManualBlock[]
-                {
-                    new ParagraphBlock(
-                        "Referenced from Setup & Testing. Component values shown in this manual (1 Ω sense resistor, target current range, continuous power rating) are illustrative pending confirmation against the Electronic Load ProtoMod's real schematic - update this appendix and the Tech notes in Section 2 once that schematic is verified, the same way the Blinky (F01) manual's resistor values were corrected after checking its real schematic."),
-                    HardwareMismatch(
-                        "That verification hasn't happened. The Rev01 board's real design - bit-banged PWM into an op-amp across a 10 Ω sense resistor, open-loop, no ADC feedback - is documented in this repo and was confirmed against hardware. Either this manual describes an intended revision, or it needs correcting; the app can't tell which."),
-                    new FigureBlock("Figure A1 - schematic excerpt, with reference designators visible. Protomod_ElectronicLoad.pdf exists in PROTOVERSE/Finished Modules/PC01_E05_ProtoMod_ElectronicLoad/Rev01 but is not bundled with the app."),
                 }, IsAppendix: true),
             });
     }

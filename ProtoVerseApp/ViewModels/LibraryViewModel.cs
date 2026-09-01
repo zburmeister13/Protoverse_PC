@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -254,6 +255,36 @@ namespace ProtoVerseApp.ViewModels
 
         private ProtoModSeries? _activeSeries;
 
+        /// <summary>Free-text filter over module name and circuit code only -
+        /// deliberately not full-text over descriptions. Someone typing here is looking
+        /// for a board they can name ("blinky", "E05"), and matching description prose
+        /// would surface cards whose visible title has nothing to do with what they
+        /// typed.</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasSearchText))]
+        private string _searchText = "";
+
+        public bool HasSearchText => !string.IsNullOrWhiteSpace(SearchText);
+
+        partial void OnSearchTextChanged(string value)
+        {
+            EntriesView.Refresh();
+            OnPropertyChanged(nameof(HasNoMatches));
+            OnPropertyChanged(nameof(NoMatchesMessage));
+        }
+
+        /// <summary>True when the current filters hide every card - otherwise the grid
+        /// is just silently blank, which reads as a broken tab rather than a search
+        /// that found nothing.</summary>
+        public bool HasNoMatches => EntriesView != null && EntriesView.IsEmpty;
+
+        public string NoMatchesMessage => HasSearchText
+            ? $"No ProtoMod matches “{SearchText.Trim()}” in this family."
+            : "No ProtoMods in this family yet.";
+
+        [RelayCommand]
+        private void ClearSearch() => SearchText = "";
+
         /// <summary>Drives both the ListBox selection (which scrolls the card into
         /// view) and the highlight ring on the card itself. Set by clicking a card or
         /// by following a "leads into" link.</summary>
@@ -274,11 +305,7 @@ namespace ProtoVerseApp.ViewModels
             foreach (var entry in ProtoModLibraryCatalog.Entries)
                 Entries.Add(new LibraryEntryViewModel(this, entry));
 
-            EntriesView = new ListCollectionView(Entries)
-            {
-                Filter = o => _activeSeries == null ||
-                              (o is LibraryEntryViewModel e && e.Entry.Series == _activeSeries)
-            };
+            EntriesView = new ListCollectionView(Entries) { Filter = PassesFilters };
 
             // "All" first and selected by default: the Library's whole point is showing
             // the full catalog, so a filter is something the user opts into.
@@ -298,6 +325,26 @@ namespace ProtoVerseApp.ViewModels
             RefreshConnectionStates(_present);
         }
 
+        /// <summary>Family filter and search combine with AND: picking "Explorers" and
+        /// typing "load" shows Explorers modules matching "load", not both sets.</summary>
+        private bool PassesFilters(object o)
+        {
+            if (o is not LibraryEntryViewModel entry)
+                return false;
+
+            if (_activeSeries != null && entry.Entry.Series != _activeSeries)
+                return false;
+
+            var query = SearchText?.Trim();
+            if (string.IsNullOrEmpty(query))
+                return true;
+
+            // Name or circuit code, case-insensitive substring. Substring rather than
+            // prefix so "led" finds both Blinky's "LED" and "Simple LED".
+            return entry.Entry.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                || entry.Entry.Code.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+        }
+
         /// <summary>Pins the grid to one ProtoMod family, or shows everything when
         /// <paramref name="series"/> is null.</summary>
         public void ApplySeriesFilter(ProtoModSeries? series)
@@ -307,6 +354,8 @@ namespace ProtoVerseApp.ViewModels
                 filter.IsSelected = filter.Series == series;
 
             EntriesView.Refresh();
+            OnPropertyChanged(nameof(HasNoMatches));
+            OnPropertyChanged(nameof(NoMatchesMessage));
         }
 
         /// <summary>Marks which catalog entries are physically plugged into the
@@ -419,12 +468,15 @@ namespace ProtoVerseApp.ViewModels
                 return;
 
             // A "leads into" link can point across families (nothing says a
-            // Fundamentals board can't lead into an Explorers one), and the target
-            // would then be filtered out of the grid - selecting it would highlight a
-            // card nobody can see. Following a link is an explicit request to go look
-            // at that module, so it wins over the filter.
-            if (_activeSeries != null && match.Entry.Series != _activeSeries)
+            // Fundamentals board can't lead into an Explorers one), and either filter
+            // could be hiding the target - selecting it would then highlight a card
+            // nobody can see. Following a link is an explicit request to go look at
+            // that module, so it clears whatever is in the way.
+            if (!PassesFilters(match))
+            {
+                SearchText = "";
                 ApplySeriesFilter(null);
+            }
 
             SelectedEntry = match;
         }
