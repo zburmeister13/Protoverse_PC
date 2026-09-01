@@ -2362,3 +2362,60 @@ no prerequisites. Explorers (E) builds on at least one Fundamentals ProtoMod.
 Advanced (A) assumes comfort with code, signals, or measurement"), which is
 the first written confirmation of a rule that until now was only a
 user-confirmed convention.
+
+---
+
+### 49. Electronic Load manual: E02 confirmed a typo, corrected to E05 - circuit conflict still open
+
+**2026-08-31, 20:05 CDT**
+
+**Prompt:** "It is indeed E05. The E02 in the manual is incorrect - a typo."
+
+**Purpose:** Close the first of the two manual-vs-hardware conflicts raised in
+entry 48, and make sure the correction is recorded rather than silently
+applied - the Word document still contains the typo.
+
+**Changes** (branch `eval/in-app-manuals-e05`):
+- `Models/Manual/ElectronicLoadManual.cs` - every learner-facing "E02" is now
+  "E05": the header code, `ModuleCode`, the Overview's module-name line, the
+  "You'll need" board entry, and both assembly steps (including "confirm
+  \"E05\" appears in the correct slot"). This is the one place the file
+  knowingly departs from its source document, and it's marked as such - a
+  transcription that silently edits its source is not a transcription.
+- The setup-section discrepancy callout no longer mentions the module code;
+  it now covers only the point that still stands, which is that the multimeter
+  listed as optional isn't optional on a board that reports no measurements.
+  Four discrepancy callouts remain, all about the circuit.
+- `SourceNote` (shown in the UI) now states that the document says E02, that
+  it's a confirmed typo, and that E05 is displayed instead - so a reader who
+  opens the `.docx` and sees a different code isn't left guessing which is
+  right.
+- `EVALUATION.md` - the conflict table now tracks status per row; the module
+  code row is Resolved and the circuit row is Open.
+
+**The Word document still has the typo.** It should be corrected at source, or
+a future `.docx` -> content converter will faithfully reintroduce E02. Noted
+in the code and in EVALUATION.md.
+
+**This strengthened one of the evaluation's recommendations.** Entry 48
+suggested the proposed converter should validate a manual's stated module code
+against `ProtoModBoardCatalog` rather than just convert it. This typo is proof
+that pays for itself: a four-line check would have caught, automatically and
+at conversion time, an error that had sat unnoticed in the document and
+ultimately took a human to adjudicate.
+
+**Still open, and still blocking this branch from going further:** the manual
+describes a power MOSFET with an op-amp feedback loop, a 1 Î© sense resistor,
+and ProtoCore's DAC/ADC setting the target and reading back live voltage and
+current. The real board is open-loop - bit-banged PWM, 10 Î© sense resistor, no
+ADC feedback path. Sections 4 and 5 ask the learner to watch voltage sag on
+screen while current holds steady, and this revision can display neither.
+
+**Verification.** Rebuilt clean and re-ran the UI Automation pass: header
+reads "Explorers Series Â· MODULE E05", metadata row unchanged (Intermediate /
+45-60 min / Simple LED (F02)), the source note explains the typo, 0
+placeholders, 2 Tech notes, 1 Observe prompt, 4 discrepancy callouts (all now
+about the circuit), the answer-key gate and reveal still work, and a TOC click
+still scrolls its target into view (y=601 -> y=209). Confirmed by grep that no
+"E02" remains in any rendered learner content - the only occurrences left are
+the source filename and the notes explaining the typo.

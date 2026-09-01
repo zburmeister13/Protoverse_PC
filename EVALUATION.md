@@ -10,11 +10,11 @@ resolve manual-vs-hardware conflicts before a manual goes in-app, because
 rendering one beside live board state makes it more authoritative than a Word
 file ever was. Detail below.
 
-> **Needs your decision before this branch goes further.** The supplied
-> Electronic Load manual describes a different board than the one the app
-> talks to — it says module **E02** where everything else says **E05**, and it
-> describes a closed-loop DAC/ADC design where the real board is open-loop PWM
-> with no measurement path. See "the finding I didn't expect" below.
+> **Still needs your decision before this branch goes further.** The supplied
+> Electronic Load manual describes a **closed-loop DAC/ADC design** where the
+> real board is **open-loop PWM with no measurement path**. (The module-code
+> conflict is resolved — "E02" was confirmed a typo for E05.) See "the finding
+> I didn't expect" below.
 
 ---
 
@@ -138,12 +138,12 @@ generated content.
 The supplied manual **describes different hardware than the board this app
 talks to**, in two ways:
 
-| | The manual says | The board actually is |
-|---|---|---|
-| Module code | **E02** throughout | **E05** — the EEPROM code, the `ProtoModBoardCatalog` entry, and the hardware folder `PC01_E05_ProtoMod_ElectronicLoad` all agree |
-| Circuit | Power MOSFET with op-amp feedback loop, **1 Ω** sense resistor, ProtoCore's **DAC** sets the target and its **ADC reads back live voltage and current** | **Open-loop**: bit-banged PWM into an op-amp, **10 Ω** sense resistor, **no ADC feedback path at all** |
+| | The manual says | The board actually is | Status |
+|---|---|---|---|
+| Module code | **E02** throughout | **E05** — EEPROM code, `ProtoModBoardCatalog`, and the folder `PC01_E05_ProtoMod_ElectronicLoad` all agree | **Resolved** — confirmed a typo. The transcription says E05; the `.docx` still says E02 and should be fixed at source, or a converter will reintroduce it. |
+| Circuit | Power MOSFET with op-amp feedback loop, **1 Ω** sense resistor, ProtoCore's **DAC** sets the target and its **ADC reads back live voltage and current** | **Open-loop**: bit-banged PWM into an op-amp, **10 Ω** sense resistor, **no ADC feedback path at all** | **Open** |
 
-The second one isn't a values nit. Sections 4 and 5 ask the learner to watch
+The circuit one isn't a values nit. Sections 4 and 5 ask the learner to watch
 voltage sag on screen while current holds steady — and this board revision can
 show neither quantity. It's the same constraint that led to removing the
 Electronic Load panel's chart rather than plotting numbers the hardware can't
@@ -169,7 +169,12 @@ revised board; but that's a guess, and it needs your answer, not mine.
 3. It argues for the converter doing a **validation pass**, not just a
    conversion: cross-check the manual's stated module code against
    `ProtoModBoardCatalog`, and flag manuals whose code doesn't match any known
-   board.
+   board. **The E02/E05 typo is proof this pays for itself** — a four-line
+   check would have caught, automatically and at conversion time, an error
+   that had sat unnoticed in the document and took a human to adjudicate.
+   Extending the same idea to component values (a manual asserting a 1 Ω sense
+   resistor where the app's own docs say 10 Ω) is harder but the same shape,
+   and would have caught the open question below too.
 
 ---
 
@@ -279,7 +284,7 @@ workspace needs to handle exercises spanning two ProtoMods.
 
 Driven through UI Automation in Simulator mode: the navigator shows three
 slots with correct presence dots and "Manual available" only on the Electronic
-Load; selecting it renders the header (Explorers Series · Module E02), the
+Load; selecting it renders the header (Explorers Series · Module E05), the
 metadata row (Intermediate / 45–60 min / Simple LED (F02)), the provenance
 note, and all 11 TOC entries; 2 Tech notes, 1 Observe prompt, 2 figure
 placeholders, 4 discrepancy callouts, the reassurance callout and 0

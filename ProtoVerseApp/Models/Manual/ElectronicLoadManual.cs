@@ -12,33 +12,39 @@ namespace ProtoVerseApp.Models.Manual
     /// six-twelfths placeholder, assembled from this repo's own notes because no manual
     /// existed at the time.)
     ///
-    /// UNRESOLVED: THE MANUAL AND THE BOARD DISAGREE. Flagged here, and surfaced in the
-    /// UI, rather than quietly reconciled - it needs a human decision:
+    /// RESOLVED - the module code. The source `.docx` says "E02" throughout; the user
+    /// confirmed (2026-08-31) that this is a typo and the module is E05, which is what
+    /// every other source in the project already said: `ProtoModBoardCatalog` maps
+    /// <see cref="ProtoModId.ElectronicLoad"/> to circuit code "E05", the hardware
+    /// lives in `Finished Modules/PC01_E05_ProtoMod_ElectronicLoad`, and the Library
+    /// catalog lists it as E05. The transcription below therefore says E05 wherever the
+    /// document said E02 - the one place this file knowingly departs from its source,
+    /// and only because the departure was confirmed.
     ///
-    ///   1. Module code. This manual says E02 throughout. Every other source in the
-    ///      project says E05: `ProtoModBoardCatalog` maps
-    ///      <see cref="ProtoModId.ElectronicLoad"/> to circuit code "E05", the hardware
-    ///      lives in `Finished Modules/PC01_E05_ProtoMod_ElectronicLoad`, and the
-    ///      Library catalog lists it as E05. The header below shows what the manual
-    ///      says; the app still identifies the physical board by its real EEPROM code.
+    /// **The Word document still has the typo.** It should be corrected at the source,
+    /// or a future `.docx` -> content converter will faithfully reintroduce E02. This
+    /// is also the exact class of error the converter should validate for: a manual
+    /// whose stated module code matches no board in `ProtoModBoardCatalog`.
     ///
-    ///   2. The circuit itself, which is the more serious one. This manual describes a
-    ///      power MOSFET with an op-amp feedback loop, a 1 Ω sense resistor, and
-    ///      ProtoCore's DAC setting the target while its ADC reads back live voltage
-    ///      and current for on-screen monitoring. The board this app actually talks to
-    ///      is open-loop: bit-banged PWM into an op-amp, a 10 Ω sense resistor, and no
-    ///      ADC feedback path at all - which is why `ElectronicLoadViewModel` reports
-    ///      commanded current and PWM duty rather than measurements, and why the user
-    ///      chose to remove that panel's chart entirely rather than plot numbers the
-    ///      hardware cannot produce (CLAUDE.md; CHANGELOG 36).
+    /// STILL UNRESOLVED: THE MANUAL AND THE BOARD DESCRIBE DIFFERENT CIRCUITS. Flagged
+    /// here, and surfaced in the UI, rather than quietly reconciled - it needs a human
+    /// decision. This manual describes a
+    /// power MOSFET with an op-amp feedback loop, a 1 Ω sense resistor, and ProtoCore's
+    /// DAC setting the target while its ADC reads back live voltage and current for
+    /// on-screen monitoring. The board this app actually talks to is open-loop:
+    /// bit-banged PWM into an op-amp, a 10 Ω sense resistor, and no ADC feedback path
+    /// at all - which is why `ElectronicLoadViewModel` reports commanded current and
+    /// PWM duty rather than measurements, and why the user chose to remove that panel's
+    /// chart entirely rather than plot numbers the hardware cannot produce (CLAUDE.md;
+    /// CHANGELOG 36).
     ///
-    ///      This matters for the learner, not just for tidiness: sections 4 and 5 ask
-    ///      them to watch voltage sag on screen while current holds steady, and this
-    ///      board revision cannot show them either quantity. The manual's own Appendix
-    ///      C already flags its component values as provisional, so the likeliest
-    ///      explanation is that it describes an intended or revised board rather than
-    ///      the Rev01 hardware on the bench - but that is a guess, and this project
-    ///      doesn't resolve hardware questions by guessing.
+    /// This matters for the learner, not just for tidiness: sections 4 and 5 ask them
+    /// to watch voltage sag on screen while current holds steady, and this board
+    /// revision cannot show them either quantity. The manual's own Appendix C already
+    /// flags its component values as provisional, so the likeliest explanation is that
+    /// it describes an intended or revised board rather than the Rev01 hardware on the
+    /// bench - but that is a guess, and this project doesn't resolve hardware questions
+    /// by guessing.
     ///
     /// The <see cref="CalloutKind.Discrepancy"/> blocks below are the only text here
     /// that isn't from the manual. They are attributed as app-side notes wherever they
@@ -55,22 +61,23 @@ namespace ProtoVerseApp.Models.Manual
             "This manual doesn't match the board in your slot");
 
         public static ManualDocument Build() => new(
-            ModuleCode: "E02",
+            ModuleCode: "E05",
             Header: new ManualHeader(
                 Series: "Explorers Series",
-                Code: "E02",
+                // E05, not the document's "E02" - confirmed typo, see the class remarks.
+                Code: "E05",
                 Name: "Electronic Load",
                 Tagline: "Draw a precise, adjustable current from any DC source, and watch feedback control keep it steady as voltage sags.",
                 Difficulty: "Intermediate",
                 Time: "45-60 min",
                 Prerequisites: "Simple LED (F02)"),
-            SourceNote: "Transcribed from Electronic_Load_E02_Manual.docx (2026-08-31). Two unresolved conflicts with the physical board are flagged in-line: the manual calls this module E02 where every other source says E05, and it describes a closed-loop DAC/ADC design where the board this app talks to is open-loop PWM with no measurement path.",
+            SourceNote: "Transcribed from Electronic_Load_E02_Manual.docx (2026-08-31). The document's module code \"E02\" is a confirmed typo and is shown here as E05. One conflict with the physical board is still unresolved and flagged in-line: the manual describes a closed-loop DAC/ADC design, where the board this app talks to is open-loop PWM with no measurement path.",
             Sections: new[]
             {
                 // ---------------------------------------------------------- 1
                 new ManualSection("overview", "1. Overview", new ManualBlock[]
                 {
-                    new ParagraphBlock("Module name: Electronic Load (E02)"),
+                    new ParagraphBlock("Module name: Electronic Load (E05)"),
                     new SubheadingBlock("Core concept"),
                     new ParagraphBlock(
                         "A power MOSFET, driven by an op-amp feedback loop, can act as an adjustable current sink - pulling a precise, chosen current from any DC source and turning the power into heat, so you can test how that source behaves under real load."),
@@ -131,7 +138,7 @@ namespace ProtoVerseApp.Models.Manual
                 {
                     new ChecklistBlock(new[]
                     {
-                        "Electronic Load (E02) ProtoMod board",
+                        "Electronic Load (E05) ProtoMod board",
                         "ProtoCore board",
                         "USB cable + computer",
                         "A DC power source to test - a AA/AAA battery, USB power bank, or bench supply, no higher than 5 V for this exercise",
@@ -139,13 +146,13 @@ namespace ProtoVerseApp.Models.Manual
                     }, Heading: "You'll need"),
                     new StepsBlock(new[]
                     {
-                        new ManualStep("Insert the Electronic Load (E02) ProtoMod into any slot on your ProtoCore."),
+                        new ManualStep("Insert the Electronic Load (E05) ProtoMod into any slot on your ProtoCore."),
                         new ManualStep("Power the ProtoCore with USB-B."),
                         new ManualStep("Open the ProtoVerse app (or use a serial monitor)."),
-                        new ManualStep("Click Identify slots and confirm “E02” appears in the correct slot."),
+                        new ManualStep("Click Identify slots and confirm “E05” appears in the correct slot."),
                     }, Numbered: true, Heading: "Assembly steps"),
                     HardwareMismatch(
-                        "The board will report E05, not E02 - that is the circuit code programmed into its EEPROM, and it is what the slot list to the left shows. The multimeter in the list above is not optional on this revision: it is the only way to see the voltage and current this exercise asks you to watch."),
+                        "The multimeter listed as optional above isn't, on this board revision: it's the only way to see the voltage and current this exercise asks you to watch. The panel above shows the current you commanded and the PWM duty being driven - neither is a measurement."),
                     new FigureBlock("Figure 1 - Electronic Load board, input terminals and heatsink visible"),
                     new StepsBlock(new[]
                     {
