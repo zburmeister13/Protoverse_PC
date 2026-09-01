@@ -4,12 +4,13 @@
         xmlns:vm="clr-namespace:ProtoVerseApp.ViewModels"
         xmlns:views="clr-namespace:ProtoVerseApp.Views"
         xmlns:conv="clr-namespace:ProtoVerseApp.Converters"
-        <!-- Widened on the manuals eval branch: the Slots tab now carries a slot
-             navigator, a live panel and a manual with its own table of contents, and
-             at 900px the manual body was squeezed to about 500px. -->
         Title="ProtoVerse" Height="780" Width="1180" MinWidth="900" MinHeight="600"
         Icon="/Assets/AppIcon.ico"
         Background="{StaticResource BgBrush}" Foreground="{StaticResource TextPrimaryBrush}">
+
+    <!-- Sized 1180x780 on the manuals eval branch: the Slots tab now carries a slot
+         navigator, a live panel and a manual with its own table of contents, and at
+         the previous 900px the manual body was squeezed to about 500px. -->
 
     <Window.Resources>
 

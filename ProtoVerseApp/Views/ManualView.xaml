@@ -97,6 +97,14 @@
                     <Setter TargetName="callout" Property="BorderThickness" Value="1"/>
                     <Setter TargetName="calloutTitle" Property="Foreground" Value="{StaticResource AccentOrangeBrush}"/>
                 </DataTrigger>
+                <!-- Manual-vs-hardware disagreement. Deliberately the loudest thing on
+                     the page: a manual rendered beside live board state borrows that
+                     state's credibility, so a mismatch has to announce itself. -->
+                <DataTrigger Binding="{Binding Kind}" Value="Discrepancy">
+                    <Setter TargetName="callout" Property="BorderBrush" Value="{StaticResource AccentOrangeBrush}"/>
+                    <Setter TargetName="callout" Property="BorderThickness" Value="2"/>
+                    <Setter TargetName="calloutTitle" Property="Foreground" Value="{StaticResource AccentOrangeBrush}"/>
+                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
@@ -373,15 +381,18 @@
                     </StackPanel>
                 </ItemsControl>
 
-                <!-- Provenance + how finished this manual actually is. -->
+                <!-- Provenance, always shown - a manual should be able to say where its
+                     content came from whether or not it's finished. The unfinished
+                     warning is the conditional part. -->
                 <Border Margin="0,14,0,18" Padding="10,8" CornerRadius="4"
                         Background="{StaticResource BgBrush}"
-                        BorderBrush="{StaticResource AccentOrangeBrush}" BorderThickness="1"
-                        Visibility="{Binding HasPlaceholders, Converter={StaticResource BoolToVisibilityConverter}}">
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                     <StackPanel>
                         <TextBlock Text="{Binding PlaceholderWarning}" TextWrapping="Wrap" FontSize="11"
-                                   FontWeight="SemiBold" Foreground="{StaticResource AccentOrangeBrush}"/>
-                        <TextBlock Text="{Binding SourceNote}" TextWrapping="Wrap" FontSize="10" Margin="0,4,0,0"
+                                   FontWeight="SemiBold" Margin="0,0,0,4"
+                                   Foreground="{StaticResource AccentOrangeBrush}"
+                                   Visibility="{Binding HasPlaceholders, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <TextBlock Text="{Binding SourceNote}" TextWrapping="Wrap" FontSize="10"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
                 </Border>

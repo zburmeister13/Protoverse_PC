@@ -42,7 +42,15 @@ namespace ProtoVerseApp.Models.Manual
         /// <summary>Marks content that doesn't exist yet. Distinct from the others so
         /// it can be styled as obviously-not-real and counted programmatically - see
         /// <see cref="ManualDocument.PlaceholderCount"/>.</summary>
-        Placeholder
+        Placeholder,
+
+        /// <summary>Marks a place where the manual and the hardware (or this app)
+        /// disagree. Not authored content - an app-side note, always attributed as
+        /// such. Exists because silently rendering a manual that describes a different
+        /// board than the one plugged in would be the worst possible outcome of moving
+        /// manuals in-app: the learner would trust it precisely because it appeared
+        /// next to live hardware state.</summary>
+        Discrepancy
     }
 
     /// <summary>One of the template's single-row callout tables.</summary>

@@ -2263,3 +2263,102 @@ from y=658 to y=126; a slot with no manual shows the explanatory placeholder.
 **Not verified: appearance** - same blank-capture limitation as entries 43-46.
 The layout is verified structurally and behaviourally; nobody has looked at
 it. Whether the manual is genuinely readable at this width is unassessed.
+
+---
+
+### 48. Real Electronic Load manual transcribed - and it describes a different board than the one the app talks to
+
+**2026-08-31, 19:45 CDT**
+
+**Prompt:** just a path - `C:\Users\zburm\Desktop\manual` - containing
+`Electronic_Load_E02_Manual.docx`, supplied while `ElectronicLoadManual.cs`
+was open in the editor. Read as: here is the real manual, use it instead of
+the placeholders.
+
+**Purpose:** Replace the six-of-twelve placeholder sections in the manuals
+spike with the actual authored manual, which also turns the demo from "what a
+half-written manual looks like" into "what a finished one looks like".
+
+**Changes** (branch `eval/in-app-manuals-e05`):
+- `Models/Manual/ElectronicLoadManual.cs` - rewritten as a faithful
+  transcription of the supplied `.docx`. All twelve sections, every paragraph,
+  callout, question and answer in the document's own wording. Placeholder count
+  went from 6 to 0.
+- `Models/Manual/ManualBlocks.cs` - added `CalloutKind.Discrepancy` for
+  app-side notes where the manual and the hardware disagree (see below).
+- `Views/ManualView.xaml` - renders that kind as the loudest thing on the page;
+  also made the provenance note always visible rather than only appearing
+  inside the unfinished-manual warning, since a finished manual should still be
+  able to say where it came from.
+- `Views/MainWindow.xaml` - fixed a XAML comment that had been placed inside
+  the `<Window>` tag's attribute list.
+- `EVALUATION.md` - revised with a measured transcription cost, the new
+  conflict finding, and a third recommendation.
+
+**THE MANUAL AND THE BOARD DISAGREE - needs a human decision, flagged not
+resolved.** Two conflicts, both surfaced in the UI as attributed app-side
+notes rather than quietly reconciled:
+1. **Module code.** The manual says **E02** throughout. Everything else says
+   **E05** - `ProtoModBoardCatalog`'s circuit code, the hardware folder
+   `PC01_E05_ProtoMod_ElectronicLoad`, and the Library catalog.
+2. **The circuit.** The manual describes a power MOSFET with an op-amp
+   feedback loop, a **1 Î©** sense resistor, and ProtoCore's **DAC** setting the
+   target while its **ADC reads back live voltage and current for on-screen
+   monitoring**. The real board is **open-loop**: bit-banged PWM into an
+   op-amp, a **10 Î©** sense resistor, no ADC feedback path - which is exactly
+   why the Electronic Load panel's chart was removed rather than plotting
+   numbers the hardware can't produce (CHANGELOG 36). Sections 4 and 5 ask the
+   learner to watch voltage sag on screen while current holds steady; this
+   revision can show neither quantity.
+
+   The manual's own Appendix C flags its component values as provisional, so
+   it may describe an intended or revised board - but that's a guess, and this
+   project doesn't settle hardware questions by guessing.
+
+**Why this became an evaluation finding rather than just a content bug:** a
+manual rendered beside live slot state borrows that state's credibility. A
+`.docx` in a folder makes no implicit claim about which board is plugged in;
+an in-app manual does. So a wrong manual is *more* dangerous in-app than in
+Word, and "only surface a manual once it agrees with the hardware" joined the
+recommendations, along with having the proposed converter validate a manual's
+stated module code against `ProtoModBoardCatalog` rather than just converting
+it. On the other hand, transcription is what surfaced a conflict that had
+presumably existed unnoticed since the manual was written - real value, but it
+means per-manual rollout cost includes reconciliation time unrelated to the
+app.
+
+**Also revised in EVALUATION.md:** transcribing a complete ~2,900-word,
+12-section manual measured at 20-30 minutes, cheaper than the 1-2 hour
+estimate in the first draft (which had been extrapolated from a module with
+almost no content). The recommendation to build a converter rather than hand
+transcribe is unchanged, but the argument is now drift from the Word source
+rather than per-manual time.
+
+**Two process mistakes worth recording, both cost a test cycle:**
+- A XAML comment placed between attributes of the `<Window ...>` tag is a hard
+  `MC3000` parse error.
+- The build failure that caused was hidden by grepping `error CS|error MSB` -
+  `MC3000` matches neither - so a test run reported results from a stale
+  `.exe` as though they were current. This is the second time this session
+  that a stale binary produced confidently wrong test output (the first was a
+  file lock, CHANGELOG 46). Both now in `CLAUDE.md`: match `error` broadly.
+
+**Verification.** Rebuilt clean, then re-ran the UI Automation pass against
+genuinely current code: header shows Explorers Series / Module E02 /
+Intermediate / 45-60 min / Simple LED (F02); provenance note visible; all 11
+TOC entries; 2 Tech notes, 1 Observe prompt, 2 figure placeholders, **4
+discrepancy callouts**, 1 reassurance callout, 0 placeholders; 13 checkboxes
+and 15 text fields; typing into a value-table cell and ticking a step both
+work; "Reveal answers" reveals the real answer key; a TOC click scrolls the
+target section to y=188; a slot with no manual still shows its placeholder.
+Appearance remains unverified, as in entries 43-47.
+
+**Noted for the Library branch** (not acted on here): this manual documents
+two real progression links - Simple LED (F02) as a prerequisite, and
+DDS/Sinusoid Generator (A01) as the next step - which is exactly the kind of
+sourced evidence `ProtoModLibraryCatalog` requires for a "leads into" link. It
+also states the F/E/A series rule in prose ("Fundamentals (F) is first-touch,
+no prerequisites. Explorers (E) builds on at least one Fundamentals ProtoMod.
+Advanced (A) assumes comfort with code, signals, or measurement"), which is
+the first written confirmation of a rule that until now was only a
+user-confirmed convention.

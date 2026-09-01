@@ -3,10 +3,18 @@
 **Branch:** `eval/in-app-manuals-e05` · **Demo module:** Electronic Load (E05)
 · **Date:** 2026-08-31
 
-**Recommendation: proceed, with two changes to the plan.** Build a
-`.docx` → content converter *before* transcribing any more manuals, and treat
-learner-progress persistence as part of v1 rather than a v2 stretch. Detail
-below.
+**Recommendation: proceed, with three changes to the plan.** Build a
+`.docx` → content converter *before* transcribing any more manuals; treat
+learner-progress persistence as part of v1 rather than a v2 stretch; and
+resolve manual-vs-hardware conflicts before a manual goes in-app, because
+rendering one beside live board state makes it more authoritative than a Word
+file ever was. Detail below.
+
+> **Needs your decision before this branch goes further.** The supplied
+> Electronic Load manual describes a different board than the one the app
+> talks to — it says module **E02** where everything else says **E05**, and it
+> describes a closed-loop DAC/ADC design where the real board is open-loop PWM
+> with no measurement path. See "the finding I didn't expect" below.
 
 ---
 
@@ -20,7 +28,9 @@ below.
 - One renderer (`Views/ManualView.xaml`) — a set of `DataTemplate`s keyed by
   block type. **Adding a manual adds data, not XAML.** That was the core claim
   to test, and it held.
-- The E05 manual (`Models/Manual/ElectronicLoadManual.cs`) as content.
+- The Electronic Load manual (`Models/Manual/ElectronicLoadManual.cs`) as
+  content, transcribed from `Electronic_Load_E02_Manual.docx` — a complete
+  12-section manual written against the template.
 - A rebuilt Slots tab: a left-hand navigator showing all three physical slots
   with a presence dot, and a workspace per slot with the module's live control
   panel docked above its manual.
@@ -79,12 +89,16 @@ than expected.
 authoring content, which is pure data. But *how* that data gets authored is
 the whole question, and it's where I'd change the plan.
 
-**Do not hand-transcribe manuals into C#.** Transcribing E05 by hand took the
-better part of an hour for a module that had almost no written content. A full
-manual (F01's Gen2 doc is ~10,000 words across 12 sections) would be 1–2 hours
-of careful, error-prone copying — and it *drifts the moment someone edits the
-Word file*, which is the actual authoring surface and always will be. Nobody
-is going to write curriculum in a `.cs` file.
+**Measured, not estimated:** transcribing the complete Electronic Load manual
+(~2,900 words, 12 sections, 7 tables) into the content model took roughly
+20–30 minutes. That's cheaper than I first guessed, and it revises down an
+earlier estimate in this document's first draft.
+
+**But still: don't hand-transcribe manuals into C#.** Per-manual time isn't
+the argument — drift is. The `.docx` is the authoring surface and always will
+be; nobody is going to write curriculum in a `.cs` file. Every hand
+transcription is a fork that starts diverging the moment someone opens Word,
+and there's no mechanism to detect that it has.
 
 **Build a `.docx` → content converter instead.** This is more tractable than
 it sounds, because the template is rigid and the filled manuals genuinely
@@ -114,8 +128,48 @@ generated content.
 
 | | With converter | By hand |
 |---|---|---|
-| Module with a written Word manual (F01, F02, E03, A01) | ~15 min cleanup | 1–2 h |
-| Module with no manual (E05, F00) | Bottleneck is *writing the manual*, not the app — the app cost is zero either way |
+| Module with a written Word manual | ~15 min cleanup | 20–30 min (measured) |
+| Module with no manual (F00) | Bottleneck is *writing the manual*, not the app — the app cost is zero either way |
+
+---
+
+## The finding I didn't expect: transcription surfaces content/hardware conflicts
+
+The supplied manual **describes different hardware than the board this app
+talks to**, in two ways:
+
+| | The manual says | The board actually is |
+|---|---|---|
+| Module code | **E02** throughout | **E05** — the EEPROM code, the `ProtoModBoardCatalog` entry, and the hardware folder `PC01_E05_ProtoMod_ElectronicLoad` all agree |
+| Circuit | Power MOSFET with op-amp feedback loop, **1 Ω** sense resistor, ProtoCore's **DAC** sets the target and its **ADC reads back live voltage and current** | **Open-loop**: bit-banged PWM into an op-amp, **10 Ω** sense resistor, **no ADC feedback path at all** |
+
+The second one isn't a values nit. Sections 4 and 5 ask the learner to watch
+voltage sag on screen while current holds steady — and this board revision can
+show neither quantity. It's the same constraint that led to removing the
+Electronic Load panel's chart rather than plotting numbers the hardware can't
+produce. The manual's own Appendix C flags its component values as
+provisional, so the likeliest reading is that it describes an intended or
+revised board; but that's a guess, and it needs your answer, not mine.
+
+**Why this matters to the evaluation rather than just being a content bug:**
+
+1. **A wrong manual is more dangerous in-app than in Word.** Rendered beside
+   live board state, it borrows that state's credibility — the learner
+   reasonably assumes the app wouldn't show them a manual for a different
+   board. A `.docx` sitting in a folder makes no such implicit claim. The demo
+   handles this with a `Discrepancy` callout kind that renders as the loudest
+   thing on the page and is explicitly attributed as an app-side note rather
+   than manual content (four of them appear), but the *only* real fix is that
+   the content and the hardware agree.
+2. **Expect this during rollout, and budget for it.** Transcribing forces
+   someone to read each manual against what the app and firmware actually do.
+   That's genuinely valuable — this conflict has presumably existed since the
+   manual was written and nobody noticed — but it means per-manual cost
+   includes reconciliation time that has nothing to do with the app.
+3. It argues for the converter doing a **validation pass**, not just a
+   conversion: cross-check the manual's stated module code against
+   `ProtoModBoardCatalog`, and flag manuals whose code doesn't match any known
+   board.
 
 ---
 
@@ -138,13 +192,14 @@ What does **not** go away:
 - **Word itself, for anyone authoring or editing.**
 
 And one genuine risk of making things *worse*: **a partially-transcribed
-manual is worse than no in-app manual.** The learner opens the app, finds six
-of twelve sections are "not written yet", and opens Word anyway — now looking
-at two sources that can disagree. The E05 demo shows exactly this state, on
-purpose, because it's the state most manuals will be in during a rollout. The
-UI is explicit about it (an orange banner counts the placeholder sections and
-names the content's provenance), but the mitigation is really sequencing:
-convert a manual completely, or don't surface it in-app at all.
+manual is worse than no in-app manual.** The learner opens the app, finds half
+the sections are "not written yet", and opens Word anyway — now looking at two
+sources that can disagree. An earlier draft of this demo was six-twelfths
+placeholder and showed exactly that; the UI handles it honestly (an orange
+banner counts the placeholder sections and names the provenance), but the real
+mitigation is sequencing — convert a manual completely, or don't surface it
+in-app at all. The current demo is the complete case, which is markedly more
+convincing, and that contrast is itself the argument for the sequencing rule.
 
 ---
 
@@ -203,9 +258,14 @@ out of the same mechanism for free.
    is the main differentiator over a PDF, and unsaved it's a downgrade.
 3. **Fix the value-table layout properly** (~half a day) before a second
    table-bearing manual ships.
-4. **Only surface a manual in-app once it's complete.** A half-written manual
-   sends the learner back to Word with two conflicting sources.
-5. **Decide separately about print.** It's the one capability that genuinely
+4. **Only surface a manual in-app once it's complete *and* agrees with the
+   hardware.** A half-written manual sends the learner back to Word with two
+   conflicting sources; a manual describing the wrong board is worse, because
+   sitting next to live slot state makes it look authoritative.
+5. **Have the converter validate, not just convert** — at minimum, check the
+   manual's stated module code against `ProtoModBoardCatalog` and refuse to
+   emit content for a code no board reports.
+6. **Decide separately about print.** It's the one capability that genuinely
    goes away, and for a classroom product it may matter more than everything
    above.
 
@@ -217,17 +277,22 @@ workspace needs to handle exercises spanning two ProtoMods.
 
 ## Verified
 
-Driven through UI Automation in Simulator mode: navigator shows three slots
-with correct presence dots and "Manual available" only on E05; selecting the
-slot renders the header, metadata row (correctly showing "Not rated" / "Not
-stated" — E05 has no stated difficulty), the provenance banner, and all 11 TOC
-entries; 3 Tech note callouts, 4 Observe prompts, 2 figure placeholders, the
-reassurance callout and 5 of 6 placeholder callouts render (the sixth is
-inside the gated answer key, correctly hidden); 14 checkboxes and 22 text
-fields present; typing into a table cell and ticking a step both work;
-"Reveal answers" removes the gate and shows Appendix A; a TOC click scrolls
-the target section from y=658 to y=126; a slot with no manual shows the
+Driven through UI Automation in Simulator mode: the navigator shows three
+slots with correct presence dots and "Manual available" only on the Electronic
+Load; selecting it renders the header (Explorers Series · Module E02), the
+metadata row (Intermediate / 45–60 min / Simple LED (F02)), the provenance
+note, and all 11 TOC entries; 2 Tech notes, 1 Observe prompt, 2 figure
+placeholders, 4 discrepancy callouts, the reassurance callout and 0
+placeholders (this manual is complete) render; 13 checkboxes and 15 text
+fields present; typing into a value-table cell and ticking a step both work;
+"Reveal answers" removes the gate and shows the real Appendix A answer key; a
+TOC click scrolls the target section to y=188; a slot with no manual shows the
 explanatory placeholder instead.
+
+One process note worth recording: an intermediate build failed with a XAML
+`error MC3000` that a too-narrow grep (`error CS|error MSB`) hid, so one round
+of testing ran against a stale executable. Same failure mode as the stale-lock
+problem noted in `CLAUDE.md` — when scripting a build, match `error` broadly.
 
 **Not verified: appearance.** Screenshot capture returns a blank client area
 for this app in this environment (documented in `CLAUDE.md`), so the layout

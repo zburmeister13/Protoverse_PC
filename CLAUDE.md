@@ -657,7 +657,17 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   nothing). `dotnet build` reports the copy failure as an error, but it's easy
   to miss under warnings — grep the output for `error MSB` too, not just
   "Build succeeded", and kill stray `ProtoVerseApp` processes before every
-  scripted run.
+  scripted run. **Match `error` broadly, not specific prefixes:** a later
+  session lost another round of testing the same way, to a XAML `error MC3000`
+  that an `error CS|error MSB` filter hid — again leaving a stale `.exe` under
+  test while the script reported results as if they were current. At least
+  three error prefixes are in play in this project (`CS`, `MSB`, `MC`), so
+  filter on `error` and `Build FAILED`, not on a list you think is complete.
+- **A XAML comment cannot go inside an element's attribute list.** Putting one
+  between attributes of the `<Window ...>` tag is a hard `MC3000` parse error
+  ("Name cannot begin with the '<' character") — obvious in hindsight, easy to
+  do when annotating why a property changed. Put the comment above the element
+  or inside its body instead.
 - **UI Automation can't see this app's modal dialogs in this environment.**
   A `ShowDialog()` window (e.g. `SignInWindow`) opens correctly but never
   appears in the UIA tree, and while it's open the *whole* process's UIA tree
