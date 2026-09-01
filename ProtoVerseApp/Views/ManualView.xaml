@@ -124,6 +124,38 @@
             </Border>
         </DataTemplate>
 
+        <!-- A real image. Schematics are drawn dark-on-white, so it sits on a light
+             card rather than being forced into the dark theme - inverting a schematic
+             makes it harder to read, not more consistent. Clicking opens the full
+             PDF, same as the button at the top. -->
+        <DataTemplate DataType="{x:Type mdl:ImageBlock}">
+            <StackPanel Margin="0,4,0,14"
+                        Visibility="{Binding Exists, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Button Command="{Binding DataContext.OpenSchematicCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        Padding="0" HorizontalAlignment="Left" Cursor="Hand"
+                        ToolTip="Open the full schematic PDF">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="frame" Background="White" CornerRadius="6" Padding="10"
+                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="frame" Property="BorderBrush" Value="{StaticResource AccentTealBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <Image Source="{Binding FullPath}" Stretch="Uniform" MaxHeight="290"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Button>
+                <TextBlock Text="{Binding Caption}" TextWrapping="Wrap" Margin="2,5,0,0"
+                           FontSize="10" FontStyle="Italic"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+            </StackPanel>
+        </DataTemplate>
+
         <!-- ========================== interactive content ========================== -->
 
         <!-- Checklists and step lists share one template: both are "items you tick
@@ -408,29 +440,25 @@
                     <Button Content="◱  Open schematic (PDF)" Command="{Binding OpenSchematicCommand}"
                             FontSize="11" Padding="11,5"
                             ToolTip="{Binding SchematicPath}"/>
-                    <TextBlock Text="Circuit only - no border or title block" FontSize="10" FontStyle="Italic"
-                               VerticalAlignment="Center" Margin="10,0,0,0"
-                               Foreground="{StaticResource TextSecondaryBrush}"/>
                 </StackPanel>
                 <TextBlock Text="{Binding SchematicError}" TextWrapping="Wrap" FontSize="10" Margin="0,4,0,0"
                            Foreground="{StaticResource AccentOrangeBrush}"
                            Visibility="{Binding SchematicError, Converter={StaticResource NullToVisibilityConverter}}"/>
 
-                <!-- Provenance, always shown - a manual should be able to say where its
-                     content came from whether or not it's finished. The unfinished
-                     warning is the conditional part. -->
+                <!-- Only the unfinished-manual warning is shown to a learner. The
+                     SourceNote behind it is provenance for whoever maintains the
+                     content and stays out of the product - it names internal files and
+                     means nothing to the person using the board. -->
                 <Border Margin="0,14,0,18" Padding="10,8" CornerRadius="4"
                         Background="{StaticResource BgBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-                    <StackPanel>
-                        <TextBlock Text="{Binding PlaceholderWarning}" TextWrapping="Wrap" FontSize="11"
-                                   FontWeight="SemiBold" Margin="0,0,0,4"
-                                   Foreground="{StaticResource AccentOrangeBrush}"
-                                   Visibility="{Binding HasPlaceholders, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                        <TextBlock Text="{Binding SourceNote}" TextWrapping="Wrap" FontSize="10"
-                                   Foreground="{StaticResource TextSecondaryBrush}"/>
-                    </StackPanel>
+                        BorderBrush="{StaticResource AccentOrangeBrush}" BorderThickness="1"
+                        Visibility="{Binding HasPlaceholders, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="{Binding PlaceholderWarning}" TextWrapping="Wrap" FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource AccentOrangeBrush}"/>
                 </Border>
+                <Border Height="14" Background="Transparent"
+                        Visibility="{Binding HasPlaceholders, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
 
                 <ItemsControl ItemsSource="{Binding MainSections}" ItemTemplate="{StaticResource SectionTemplate}"/>
 

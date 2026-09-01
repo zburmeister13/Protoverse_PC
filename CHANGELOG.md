@@ -2514,3 +2514,89 @@ message, clear -> all six restored.
 evaluation branch, because `eval/in-app-manuals-e05` was cut from
 `feature/protomod-library` and that is where the Library lives. They should be
 cherry-picked back if the manuals evaluation is discarded.
+
+---
+
+### 51. Manual polish: full-PDF link, embedded circuit image, and cutting content that doesn't belong in the product
+
+**2026-08-31, 22:20 CDT**
+
+**Prompt:** six corrections. (1) Link the *full* PDF from `Finished Modules`,
+not the cropped one, now and in future. (2) Show a snapshot of the circuit as
+a built-in image in the Overview, without cutting off any symbol info the way
+the cropped E05 PDF did. (3) Delete the "Circuit only - no border or title
+block" caption next to the link. (4) Delete the provenance block ("Written
+against the board's verified behaviour (CLAUDE.md...)") - not appropriate to
+show in the product. (5) Delete the assembly steps, which make no sense
+because they must already be done for the manual to be reachable, and the
+Observe block about the app auto-identifying on connect. (6) Delete the
+"Record what you find" table - not filled out, awkward, useless here.
+
+**Purpose:** Make the manual read like a product rather than a work log.
+
+**Changes:**
+- `tools/build_schematics.ps1` (replaces `crop_schematics.ps1`) - now produces
+  two assets per board: `{CODE}_schematic.pdf`, the original drawing copied
+  verbatim with border and title block intact, and `{CODE}_circuit.png`, a
+  cropped raster of just the circuit for the inline image. The PDF crop is
+  gone entirely - the link wants the whole drawing.
+- The PNG is rasterised with **headless Microsoft Edge**, since there is no SVG
+  rasteriser, PDF tool or Python on this machine and kicad-cli has no PNG
+  export. Edge is on every Windows box.
+- `Models/Manual/ManualBlocks.cs` - new `ImageBlock`, with an `Exists` check so
+  a missing asset renders nothing rather than a broken-image box.
+- `Models/Manual/ElectronicLoadManual.cs` - circuit image added to Overview;
+  assembly steps removed; "You'll need" trimmed to just the multimeter;
+  value table removed.
+- `Views/ManualView.xaml` - image template (on a white card, since schematics
+  are drawn dark-on-white and inverting one makes it harder to read, not more
+  consistent; clicking it opens the full PDF); the "circuit only" caption and
+  the SourceNote display both removed. The unfinished-manual warning stays -
+  that one is for the learner. SourceNote remains in the model as provenance
+  for whoever maintains the content.
+
+**Two bugs found by looking at output rather than trusting numbers:**
+- **The first crop shaved labels.** Measuring only `<path>` and `<circle>`
+  geometry clipped reference designators and component values - the symbols
+  were there, their labels weren't. Including every `<text>` over-corrected:
+  kicad-cli leaves the sheet's own title text on the page even with the
+  drawing sheet excluded, and that one stranded label stretched the crop by
+  ~60mm of whitespace. Fixed with a second pass that takes text near the
+  circuit and ignores text far from it. Verified by viewing the PNG, not by
+  reading the bounding box numbers - which had looked plausible both times.
+- **`CopyToOutputDirectory="PreserveNewest"` silently shipped a stale asset.**
+  `Copy-Item` preserves the source timestamp and these schematics are dated
+  2025, so MSBuild judged the copy already in `bin\` to be newer and kept it.
+  The tool reported success, the build reported success, and the app kept
+  opening the previous file. Caught by hashing the shipped PDF against the
+  original rather than trusting that the copy had happened. The tool now
+  stamps each copied PDF with the current time.
+
+**Evaluation impact - the fillable table finding is now negative.**
+EVALUATION.md previously argued that genuinely interactive value tables were
+the main differentiator over a PDF and should be pulled into v1. The one place
+it was tried, the user found it useless, and E05 was the strongest candidate
+in the catalog for the pattern - the only board with a dial to turn and a
+number to read back. The revised position: the mechanism was fine but the
+framing was wrong (a blank grid mid-section is homework, not a tool), so don't
+build interactive tables into the manual flow; if the idea returns it should
+be a separate opt-in surface. Persistence is still worth having for ticked
+steps and revealed answers.
+
+**Also recorded in EVALUATION.md:** in-app manuals make some print sections
+redundant. The assembly steps were sound in a printed manual and absurd beside
+a live panel showing the board already running. A converter that faithfully
+reproduces all twelve template sections will faithfully reproduce content that
+no longer makes sense in context, so expect a per-manual editorial pass, not
+just a conversion.
+
+**Verification.** UI Automation, Simulator mode: the schematic button's target
+is byte-identical (MD5) to `Finished Modules\...\Protomod_ElectronicLoad.pdf`,
+and all six shipped PDFs match their assets; one image element renders in the
+manual at 684x257px with its caption; no "no border or title block" text, no
+provenance text, no "Assembly steps" heading, no "Insert the Electronic Load"
+step, no "auto-identifies on connect" observe; "You'll also need" kept; no
+"Record what you find" table and no "aren't saved yet" note; six text fields
+remain (five reflection answers plus the Library search box). Section list
+unchanged at five body sections plus two appendices. The cropped PNG was
+inspected directly and shows every designator, value and pin name intact.

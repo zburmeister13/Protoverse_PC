@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -26,12 +26,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Schematic PDFs, exported from the KiCad sources via kicad-cli with the
-         exclude-drawing-sheet option (no border, no title block) and then cropped to
-         the drawn content. Copied beside the .exe rather than embedded as a Resource
-         because the manual opens them in the system PDF viewer, which needs a real
-         file path. See EVALUATION.md for how they were produced and regenerated. -->
-    <None Include="Assets\Schematics\*.pdf" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Built by tools/build_schematics.ps1 from the KiCad sources. Two per board:
+         {CODE}_schematic.pdf is the complete original drawing, border and title block
+         intact, opened by the manual's schematic button; {CODE}_circuit.png is a
+         cropped raster of just the circuit, shown inline in the manual's Overview.
+         Copied beside the .exe rather than embedded as Resources because the PDF is
+         handed to the system viewer, which needs a real file path. -->
+    <None Include="Assets\Schematics\*.*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
+

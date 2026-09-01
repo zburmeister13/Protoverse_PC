@@ -708,3 +708,10 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   debugging round in `tools/crop_schematics.ps1` when a hashtable overwrote the
   path parameter it was meant to be joined against, and the script then did
   nothing at all without erroring visibly.
+- **`CopyToOutputDirectory="PreserveNewest"` can silently ship a stale asset.**
+  `Copy-Item` preserves the *source* file's timestamp, so copying an old file
+  (e.g. a 2025-dated schematic PDF) into `Assets\` leaves MSBuild believing the
+  copy already in `bin\` is newer, and it keeps the old one. The tool reports
+  success, the build reports success, and the app keeps using the previous
+  file. Stamp copied assets with the current time, and verify by hashing the
+  file in `bin\` rather than assuming the copy happened.

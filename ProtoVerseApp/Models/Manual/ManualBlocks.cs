@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace ProtoVerseApp.Models.Manual
 {
@@ -57,10 +59,23 @@ namespace ProtoVerseApp.Models.Manual
     public record CalloutBlock(CalloutKind Kind, string Text, string? Title = null) : ManualBlock;
 
     /// <summary>A figure the manual references. No manual in this project has real
-    /// figures yet - both the template and every filled manual carry literal
+    /// photos yet - both the template and every filled manual carry literal
     /// "[ figure / photo ]" markers - so this always renders as a placeholder frame
-    /// with its caption.</summary>
+    /// with its caption. For a real picture, see <see cref="ImageBlock"/>.</summary>
     public record FigureBlock(string Caption) : ManualBlock;
+
+    /// <summary>A real image shipped with the app, from `Assets/Schematics/`.
+    /// Currently that means the cropped circuit rasters built by
+    /// `tools/build_schematics.ps1`.</summary>
+    public record ImageBlock(string FileName, string? Caption = null) : ManualBlock
+    {
+        public string FullPath =>
+            Path.Combine(AppContext.BaseDirectory, "Assets", "Schematics", FileName);
+
+        /// <summary>False if the asset didn't ship - the renderer then shows nothing
+        /// rather than a broken-image box.</summary>
+        public bool Exists => System.IO.File.Exists(FullPath);
+    }
 
     /// <summary>The "You'll need" checklist. Checkable in the UI; see
     /// <see cref="ManualProgress"/> for how that state would persist.</summary>

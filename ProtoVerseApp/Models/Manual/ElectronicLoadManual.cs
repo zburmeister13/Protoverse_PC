@@ -62,6 +62,8 @@ namespace ProtoVerseApp.Models.Manual
                     }),
                     new ParagraphBlock(
                         "That last bullet is the one worth sitting with, and it is what this module is really about. Most instruments tell you what they measured. This one tells you what it was told to do. Learning to notice that difference - and knowing when it matters - is a habit that will outlast this board."),
+                    new ImageBlock("E05_circuit.png",
+                        "The whole circuit. Click for the full schematic, with revision and title block."),
                 }),
 
                 // ============================================================== 2
@@ -99,15 +101,17 @@ namespace ProtoVerseApp.Models.Manual
                 // ============================================================== 3
                 new ManualSection("setup", "3. Set up and try it", new ManualBlock[]
                 {
+                    // No board / ProtoCore / USB cable in this list, and no assembly
+                    // steps section at all. In a printed manual those come first
+                    // because the reader might not have started yet; in-app, this
+                    // manual only exists *because* the board is already seated and
+                    // talking, so telling them to plug it in is noise. Only what they
+                    // might still be missing is listed.
                     new ChecklistBlock(new[]
                     {
-                        "Electronic Load (E05) ProtoMod board",
-                        "ProtoCore board",
-                        "USB cable + computer",
                         "A multimeter that can read DC current - not optional for this module, since the board reports no measurements of its own",
-                    }, Heading: "You'll need"),
-                    ManualBoilerplate.AssemblySteps("Electronic Load", "E05"),
-                    new FigureBlock("ProtoCore with the Electronic Load (E05) installed, multimeter in series with the load path"),
+                    }, Heading: "You'll also need"),
+                    new FigureBlock("Multimeter in series with the load path"),
                     new StepsBlock(new[]
                     {
                         new ManualStep(
@@ -142,18 +146,6 @@ namespace ProtoVerseApp.Models.Manual
                         "Every one of those observations except the last comes from the command path alone. Firmware takes your current, runs it through the calibration to get a duty, drives the PWM at that duty, and reports both numbers back. Nothing in that round trip touches the load. It can reject 400 mA without measuring anything, because the limit is a constant it already knows."),
                     new ParagraphBlock(
                         "The last observation is the only one that required an instrument, and it is the only one that tells you what the circuit actually did. Everything else was the board describing its own intentions."),
-                    new ValueTableBlock(
-                        Id: "duty-sweep",
-                        Columns: new[] { "Commanded", "Duty you predict", "Duty reported", "Current you measure", "Notes" },
-                        Rows: new[]
-                        {
-                            new[] { "10 mA" },
-                            new[] { "50 mA" },
-                            new[] { "100 mA" },
-                            new[] { "150 mA" },
-                            new[] { "300 mA" },
-                        },
-                        Heading: "Record what you find"),
                     new CalloutBlock(CalloutKind.Observe,
                         "Where your measured current and your commanded current disagree, the board will never say so. Which of the two would you write down as \"the current\", and what would you have to do to earn the right to trust it?"),
                 }),

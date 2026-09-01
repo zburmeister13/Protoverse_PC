@@ -213,28 +213,54 @@ What does **not** go away:
   photos does.
 - **Word itself, for anyone authoring or editing.**
 
+### In-app manuals make some print sections redundant
+
+Not a rendering problem, a content one, and it only became obvious once the
+manual was rendered in place: **the assembly steps were removed** because the
+manual is reachable only when the board is already seated and enumerated. "Insert
+the ProtoMod into any slot, power the ProtoCore, open the app, click Identify
+slots" is sound in a printed manual — the reader may not have started — and
+absurd next to a live panel showing the board already running. The same logic
+trimmed "You'll need" down to the multimeter, since the board, ProtoCore and
+USB cable are self-evidently present.
+
+This cuts against the templated-conversion plan in a small way: a converter
+that faithfully reproduces all twelve template sections will faithfully
+reproduce content that no longer makes sense in context. Expect a per-manual
+editorial pass, not just a conversion, and consider marking sections in the
+template as print-only.
+
 ### Schematics turned out to be a solved problem
 
 Worth calling out because it removes what I first listed as a permanent
-caveat. KiCad's CLI exports a schematic with the border and title block
-suppressed:
+caveat. `tools/build_schematics.ps1` produces two assets per board from the
+KiCad sources, and takes seconds to re-run — **schematics are a build step,
+not per-manual work.**
 
-```
-kicad-cli sch export pdf --exclude-drawing-sheet --no-background-color -o out.pdf in.kicad_sch
-```
+- **`{CODE}_schematic.pdf`** — the complete original drawing, copied verbatim
+  from `Finished Modules`, border and title block intact. This is what the
+  manual's schematic button opens: someone opening the full drawing wants the
+  full drawing, revision block and all.
+- **`{CODE}_circuit.png`** — a cropped raster of just the circuit, shown
+  inline in the Overview. Made by exporting SVG with kicad-cli's
+  exclude-drawing-sheet option, tightening the viewBox to the drawn content,
+  and rasterising with **headless Edge** — there is no SVG rasteriser, PDF
+  tool or Python on this machine, and Edge is on every Windows box.
 
-That still leaves the circuit floating on an A4 page. With no PDF tooling on
-this machine (no Ghostscript, qpdf or Python), the crop is done by rewriting
-the page's `/MediaBox` in place, **padded to the same byte length** so every
-xref offset in the file stays valid — an inserted `/CropBox` would have
-invalidated them. The content bounds come from the matching SVG export, whose
-geometry is plain-text millimetres.
+Two things that had to be got right, both found by looking at the output
+rather than the numbers:
 
-All six boards were processed this way and dropped from A4 to their actual
-circuit extents (E05: 235 × 84 mm, F01: 184 × 70 mm, and so on). The script is
-in this branch's history and takes seconds to re-run, so **schematics are a
-build step, not per-manual work** — which was not true when this document was
-first written.
+- **The bounds must include text, but not all of it.** Measuring only `<path>`
+  and `<circle>` geometry shaved reference designators and pin values off the
+  edges. Including every `<text>` instead over-corrected: kicad-cli leaves the
+  sheet's own title text on the page even with the drawing sheet excluded, and
+  that stranded label stretched the crop by ~60 mm of whitespace. The fix is a
+  second pass that takes text near the circuit and ignores text far from it.
+- **`CopyToOutputDirectory="PreserveNewest"` silently kept a stale copy.**
+  `Copy-Item` preserves the source timestamp, and these schematics are dated
+  2025, so MSBuild judged the file already in `bin\` to be newer and left it —
+  the tool reported success while the app kept shipping the previous asset.
+  The tool now stamps each copied PDF with the current time.
 
 And one genuine risk of making things *worse*: **a partially-transcribed
 manual is worse than no in-app manual.** The learner opens the app, finds half
@@ -263,17 +289,36 @@ convincing, and that contrast is itself the argument for the sequencing rule.
 
 ## Stretch: should the interactive parts be real?
 
-**Yes, and I'd pull it into v1 rather than leaving it as v2.**
+**Revised down, after trying it.** The fillable value table was built and then
+**removed at the user's request** — "not filled out, awkward and useless in
+this case". That is worth taking seriously, because E05 was the strongest
+candidate in the catalog for it: the one board with a dial to turn and a
+number to read back. If the pattern doesn't earn its place there, the case for
+it being *the* differentiator over a PDF is weak.
 
-The reasoning is a defect this demo already has. The table cells and answer
-fields accept input, but nothing is saved — and because `SlotViewModel`
-rebuilds its `ManualViewModel` on every `PresenceReport`, **hot-swapping any
-module while you have work typed in silently discards it.** Firmware sends
-unsolicited presence reports on hot-swap, so this isn't hypothetical.
+What seems to have gone wrong is the framing, not the mechanism. A blank
+five-row grid asking a learner to predict duty cycles is homework, and it sat
+in the middle of a section they were reading rather than doing. A worksheet
+wants to be something you open deliberately, not something you scroll past.
 
-An unsaved fillable field is worse than paper: paper doesn't lose your
-measurements when someone bumps a board. Shipping the interactive table
-without persistence would be a regression against the PDF it's meant to beat.
+So: **don't build interactive tables into the manual flow.** If the idea comes
+back, it should be a separate, opt-in surface — and it should be tested on one
+module before being designed for the catalog.
+
+The rest of the persistence argument survives intact, and applies to the
+things that *did* stay:
+
+**Ticked steps and revealed answers should persist, and I'd still pull that
+into v1.**
+
+The reasoning is a defect this demo already has. The answer fields accept
+input, but nothing is saved — and because `SlotViewModel` rebuilds its
+`ManualViewModel` on every `PresenceReport`, **hot-swapping any module while
+you have work typed in silently discards it.** Firmware sends unsolicited
+presence reports on hot-swap, so this isn't hypothetical.
+
+An unsaved input field is worse than paper: paper doesn't lose your work when
+someone bumps a board.
 
 **The good news is that it's mostly already done.** `Models/Manual/ManualProgress.cs`
 defines the shape, and every interactive block already carries a stable
