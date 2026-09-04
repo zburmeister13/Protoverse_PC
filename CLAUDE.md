@@ -673,6 +673,32 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   out of that bitmap in memory worked reliably every time. Prefer that
   approach for any future taskbar screenshot verification rather than a
   direct small-region capture.
+- **Screenshotting this app's own window DOES work, and earlier sessions were
+  wrong to record it as impossible** (settled 2026-09-04). Several sessions
+  concluded appearance could not be verified because captures came back
+  blank; the working recipe was found while building the README's screenshots
+  and is worth reusing verbatim:
+  1. **Kill Greenshot first.** It is installed on this machine and its
+     language-picker dialog reopens and steals foreground, which both covers
+     the window and leaves it rendering as inactive. This, not WPF, was the
+     main cause of the "blank"/garbled captures.
+  2. Position the window with `MoveWindow` + `SetForegroundWindow`, then wait
+     ~1.4s before capturing so WPF has painted.
+  3. Capture the **full desktop** and crop in memory (as above).
+  4. Crop to `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS = 9)`, not
+     `GetWindowRect` — the latter includes the invisible resize border, so
+     other windows bleed into the edges of the image.
+  Drive the app with UI Automation to reach the state worth photographing.
+  The modal-dialog limitation below is unaffected and still stands.
+- **Headless Edge also renders Mermaid, which is how README diagrams get
+  checked before they ship.** Extract the ```mermaid blocks into an HTML page
+  that loads mermaid from cdnjs, screenshot it with
+  `msedge --headless=new --screenshot`, and *look at the result* - a broken
+  diagram renders as a "Syntax error in text" bomb graphic on GitHub, which
+  is not something a build or a link-checker will catch. This found a real
+  error on the first pass: **a semicolon inside a `sequenceDiagram` message
+  breaks the parse**, because Mermaid treats `;` as a statement separator.
+  Avoid semicolons in diagram labels.
 
 ## Gotchas already hit (save yourself the loop)
 

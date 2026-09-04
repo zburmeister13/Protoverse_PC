@@ -2899,3 +2899,67 @@ byte-identical (MD5) to `Protomod_simpleLED_Rev01.pdf`; circuit image at
 684x232px; TP and J1 content present; 20 option rows with no explanation visible
 before answering and correct marking after. F01 still renders and correctly shows
 no needs-review banner.
+
+---
+
+### 56. Merge everything to main; rewrite README as an illustrated product document
+
+**2026-09-04, 14:05 CDT**
+
+**Prompt:** "merge everything to main branch in git / Create a readme document
+and put on git that is a complete summary of the functionality of this code,
+that reads like a marketing document to a group of engineers complete with flow
+diagrams and images of the app in it's various uses."
+
+**Purpose:** Land all outstanding work on `main`, and replace a README that
+described a layout the app no longer had.
+
+**Merge.** `feature/protomod-library` and `eval/in-app-manuals-e05` both
+fast-forwarded into `main`. `origin/main` had meanwhile gained a merge commit
+from PR #1 (the Library branch, merged on GitHub) - same content, different
+history shape, `git diff HEAD...origin/main` empty. Reconciled with a real merge
+rather than a force push, and confirmed the resulting tree was identical to the
+commit that had actually been tested before pushing.
+
+**Screenshots - the "can't screenshot this app" note was wrong.** Several
+earlier entries recorded appearance as unverifiable because captures came back
+blank. The real cause was mostly **Greenshot**, installed on this machine, whose
+language-picker dialog reopens and steals foreground. With it killed, captures
+work fine. The recipe is now in `CLAUDE.md`: kill Greenshot, position with
+`MoveWindow`/`SetForegroundWindow`, wait for paint, capture the full desktop and
+crop, and crop to `DWMWA_EXTENDED_FRAME_BOUNDS` rather than `GetWindowRect` -
+the latter includes the invisible resize border, which lets other windows bleed
+into the edges.
+
+Six new screenshots in `docs/screenshots/`, all driven to state via UI
+Automation in Simulator mode: `workspace`, `manual-questions`,
+`manual-electronic-load`, `library`, `passive-board`, `traffic-log`. Deleted
+`main-window.png`, which showed the stacked-panel layout replaced by the slot
+navigator in entry 45.
+
+One shot was deliberately re-taken: the first Electronic Load capture landed on
+the manual passage asserting that 400 mA is accepted at 100% duty, which is the
+claim currently in dispute (entry 55 / the firmware exchange). Featuring an
+unresolved technical claim in a product document is not a good trade for a
+slightly better screenshot, so it was re-shot on "How it works" instead.
+
+**README.** Rewritten as an illustrated product document aimed at engineers -
+what it does, why it is built that way, and what is actually proven. Six Mermaid
+diagrams: system context, layer/data flow, connect-identify-panels sequence,
+slot-resolution flowchart, command round trip, and the add-a-ProtoMod flow. The
+protocol reference, presence-report rationale and extension steps carried over
+from the previous README; the Library, manuals, passive boards and
+unsourced-content flagging are new. Ends with a status table that keeps
+*compiles*, *works in the simulator* and *confirmed on hardware* separate,
+including the unresolved 300 mA question.
+
+**Diagrams were rendered before shipping, and one was broken.** Extracted the
+Mermaid blocks into an HTML page loading mermaid from cdnjs, screenshotted it
+with headless Edge, and looked: the connect sequence failed with "Syntax error
+in text" because **a semicolon inside a `sequenceDiagram` message breaks the
+parse** - Mermaid treats `;` as a statement separator. Reworded. All six confirmed
+rendering afterwards. Nothing in a build or a link check would have caught this;
+it would simply have shipped as a bomb graphic on GitHub.
+
+**Also:** `CLAUDE.md` gains the working capture recipe, the Mermaid-verification
+technique and the semicolon trap.

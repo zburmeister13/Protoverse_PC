@@ -1,245 +1,400 @@
 # ProtoVerse PC App
 
-A Windows desktop app (WPF, .NET 8) that talks to a ProtoCore board over USB
-serial and gives you a live control panel for whichever ProtoMods are plugged
-into it — no serial terminal, no hand-decoding hex, no code required to use it.
+**Plug in a board. It appears, already working, with its lab manual attached.**
 
-![Main window, connected to real ProtoCore hardware with an Electronic Load and a Blinky LED installed](docs/screenshots/main-window.png)
+A Windows desktop app (WPF, .NET 8) that talks to a ProtoCore over USB serial
+and turns whatever ProtoMods are plugged into it into live control panels —
+no serial terminal, no hand-decoding hex, no code required to use it.
 
-## What it does
+![The workspace: slot navigator on the left, the live Blinky LED panel above, that board's manual below](docs/screenshots/workspace.png)
 
-- **Auto-detects what's plugged in.** Connect, and every populated slot turns
-  into a real control panel automatically — no manual configuration.
-- **Live control, not just monitoring.** Blinky LED's four LEDs, animation
-  pattern, direction, and rate are all controllable from the UI and reflect
-  the device's actual state (not a locally-guessed one).
-- **Hot-swap safe.** Pull a ProtoMod and plug in a different one while
-  connected — the slot updates itself, and one misbehaving module can't take
-  down the rest of the app.
-- **Works with zero hardware.** A "Simulator mode" checkbox swaps in a fake
-  ProtoCore that reports modules and streams plausible telemetry, so the app
-  is fully usable for development, demos, or curriculum work without a board
-  on hand.
-- **Explains itself when something goes wrong.** The Traffic Log records
-  every frame sent and received, decoded into plain English — this is what
-  actually diagnosed a real firmware freeze bug during development (see
-  `CHANGELOG.md` entry 38 for the full story).
+---
 
-![Traffic Log, expanded, showing real hardware exchanges with the Info column decoded into plain English](docs/screenshots/traffic-log.png)
+## Why it exists
 
-## Module support status
+ProtoVerse is a modular electronics education platform: a ProtoCore host board
+plus interchangeable ProtoMods, each teaching one concept. The catalog is being
+designed for **1,000+ eventual module types**, of which any one ProtoCore holds
+three.
 
-| ProtoMod | Status |
+That number is the whole design constraint. An app that hardcodes its module
+list is dead on arrival at that scale, so this one hardcodes nothing: it asks
+the hardware what is present and builds the UI from the answer. Adding a module
+to the app is one line in a registry plus its own panel — no changes to slot
+logic, window layout, or anything else.
+
+The second constraint is the audience. The person holding the board may never
+have used a multimeter. So the app carries the teaching material too, next to
+the live hardware, instead of leaving a PDF open in another window.
+
+---
+
+## What you get
+
+### One window, whatever is plugged in
+
+Connect and the app immediately asks ProtoCore what is in each slot. Every
+populated slot becomes a real control panel — no configuration step, no module
+picker. Pull a board mid-session and plug in a different one and the slot
+re-resolves itself live, because ProtoCore volunteers a fresh report on
+hot-swap rather than waiting to be asked.
+
+The left rail is the slot navigator: three physical slots, a colour-coded
+status dot each, and whether that board ships a manual. Selecting one opens its
+workspace — controls on top, manual underneath.
+
+### Lab manuals, inside the app, next to the hardware
+
+![A manual's self-marking questions: the chosen answer marked correct, with the reasoning revealed in place](docs/screenshots/manual-questions.png)
+
+Manuals are rendered from a structured content model, not embedded PDFs — so
+they are interactive where it matters:
+
+- **Tickable steps** with inline `OBSERVE` prompts, so the learner reads the
+  question at the moment it applies rather than in a block at the end.
+- **Self-marking multiple choice.** Answering reveals the correct answer *and*
+  the reasoning, in place. No answer key to leak, and no way to read the
+  answers before committing to one.
+- **A table of contents that tracks your scroll position**, so a learner
+  mid-task can get back to a step without hunting.
+- **The real schematic**, one click away — the complete KiCad-exported PDF,
+  plus a monochrome circuit render inline in the overview.
+
+Three manuals ship today: Blinky (F01), Simple LED (F02) and Electronic Load
+(E05). They are deliberately pitched differently — F-series manuals assume the
+reader has never met Ohm's law, E-series assume they own a multimeter.
+
+### Deep enough for the hard boards
+
+![The Electronic Load manual explaining PWM-as-DAC, with the live panel above it](docs/screenshots/manual-electronic-load.png)
+
+The Electronic Load manual teaches the thing that board is actually good for:
+the difference between a value a machine was *told* and a value it *measured*.
+That hardware is open-loop by design — a bit-banged PWM into an op-amp forcing
+current through a sense resistor, with no ADC anywhere on the current path.
+
+So the panel deliberately shows **no chart and no "measured" readouts**, and
+says so on its face: *values above are commanded, not measured*. Fabricating a
+plot from an echoed setpoint would have been easy and would have taught exactly
+the wrong lesson.
+
+### A catalog you can browse before you own it
+
+![The Library tab: family filters, search, per-card sourcing, and a kit-ownership prompt](docs/screenshots/library.png)
+
+The **Library** tab shows the entire ProtoMod catalog — not just what is
+plugged in. Filter by family (Fundamentals / Explorers / Advanced), search by
+name or circuit code, and see every board at full strength. Nothing is dimmed,
+locked, or hidden behind ownership.
+
+Two facts are tracked per board, and the app is careful never to conflate them:
+
+| Fact | How it is established |
 |---|---|
-| **Blinky LED** | Fully implemented — real commands, real device-echoed state, no placeholders. |
-| **Electronic Load** | Wire format finalized and confirmed against real hardware. No live chart by design — this board has no ADC feedback, so there's nothing measured to plot, only the commanded current and PWM duty it echoes back. |
-| **Accelerometer + Temperature** | UI is complete (live charts: temperature trend, an X/Y tilt "bubble level," a Z fill gauge), but the wire payload is still a placeholder pending firmware defining this sensor's real command set. |
-| **Basic LED**, others | Identified by firmware but not yet given a panel in this app — shown as an "Unsupported module" placeholder rather than crashing or being hidden. |
+| **Has it been plugged in?** | Observed automatically from `PresenceReport` |
+| **Does the user say it is theirs?** | Only ever by clicking |
 
-See `CLAUDE.md` for the full, currently-accurate story on what's real vs.
-provisional, and `CHANGELOG.md` for the chronological history of how it got
-there.
+Seeing a board proves it was plugged in, not that anyone owns it — a borrowed
+or classroom board is the obvious case. So a newly-seen card *asks*: "Is this
+ProtoMod part of your kit?" Nothing is ever silently claimed on the user's
+behalf.
+
+Tracking is per profile, so two people sharing a PC do not merge kits. **These
+profiles are not a security feature and are not meant to be** — no password, no
+encryption, one readable JSON file. Their job is separating one person's
+tracking from another's, not keeping anyone out.
+
+**Every word on those cards is sourced.** Descriptions, schematic summaries and
+project ideas are quoted from a document that actually exists, and each card
+displays which one. Where no source material exists the field reads "coming
+soon" rather than being filled with something plausible. ProtoVerse is physical
+hardware sold to learners — an invented module description is a promise the
+board cannot keep, and the customer is holding the board.
+
+### Boards that are hands-on by design
+
+![Simple LED: a green slot, a no-software-controls note, and a banner flagging unsourced manual content](docs/screenshots/passive-board.png)
+
+Some ProtoMods have no software controls at all — every input is a switch on
+the board. Simple LED (F02) is the first.
+
+These get a green dot and a note pointing at the board's own switches, **not**
+the orange "unsupported" treatment. The distinction is deliberate: *"no panel
+because none is possible"* and *"no panel yet"* look identical from the code
+that builds the slot, but they are opposite facts, and only one of them is a
+gap to close. Telling a learner the app does not support their board, directly
+above that board's manual, is a bad first impression of both.
+
+The blue banner in that screenshot is a second honesty mechanism. F02's source
+manual predates the current template, so some passages had to be written for
+the app with no document behind them. Those are flagged in place and counted at
+the top. Unsourced content that *looks* finished is more dangerous than content
+that is obviously missing — the only way to catch it is to have it say so.
+
+### Nothing hidden on the wire
+
+![The Traffic Log: every frame as raw hex and as a plain-English decode](docs/screenshots/traffic-log.png)
+
+Every frame sent and received is logged as **both** raw hex and a plain-English
+decode — `SetCurrentLimitMa: 100 mA`, `Error: PROTOCOL_ERR_NOT_IMPLEMENTED
+(0x04)`, `Slot 0: BlinkyLed, Slot 1: AccelTemp, Slot 2: ElectronicLoad`.
+Framing errors, checksum failures and disconnects appear here too.
+
+This is not a debug afterthought. It is the only thing in the system that can
+distinguish three failure modes that otherwise look identical from the UI:
+
+1. The app did nothing.
+2. Firmware is alive and **rejecting** the frame (an `Error` response).
+3. Firmware's main loop has **stopped** (silence, on an otherwise healthy link).
+
+Case 3 is not hypothetical — the Traffic Log is what diagnosed a real firmware
+freeze during development: an unbounded USB retry that could wedge ProtoCore's
+entire superloop, found from a capture showing two clean exchanges followed by
+total silence. See `CHANGELOG.md` entry 38.
+
+### Works with no hardware at all
+
+A **Simulator mode** checkbox swaps the real serial port for a fake ProtoCore
+that reports modules, answers commands, and streams plausible telemetry. The
+whole app — panels, manuals, Library, Traffic Log — is fully usable for
+development, demos and curriculum work with nothing plugged in. Every
+screenshot in this document was taken in Simulator mode.
+
+---
+
+## How it works
+
+### System context
+
+```mermaid
+flowchart LR
+    subgraph PC["Windows PC"]
+        APP["<b>ProtoVerse App</b><br/>WPF · .NET 8"]
+    end
+    subgraph BOARD["ProtoCore"]
+        FW["<b>Firmware</b><br/>STM32 · USB CDC"]
+    end
+    subgraph MODS["ProtoMod slots"]
+        M1["Blinky<br/>F01"]
+        M2["Simple LED<br/>F02"]
+        M3["Electronic Load<br/>E05"]
+    end
+    APP <-->|"USB CDC · framed binary protocol"| FW
+    FW <-->|"I2C identity bus · reads each board's EEPROM"| MODS
+```
+
+Each ProtoMod carries an EEPROM holding its circuit code. ProtoCore reads it
+over I2C, maps it to a `ProtoModId`, and reports the result. **The app never
+touches that bus** — it only ever receives the conclusion.
+
+### Layers
+
+`ISerialService` is the seam Simulator mode plugs into: `FrameDispatcher` talks
+to the interface, never to `SerialService` directly, so the mock stands in
+without either side knowing.
+
+```mermaid
+flowchart TD
+    RS["<b>SerialService</b><br/>owns the port + background read thread<br/>bounded timeouts, disconnect detection"]
+    MS["<b>MockSerialService</b><br/>fake ProtoCore for Simulator mode"]
+    ISS(["<b>ISerialService</b>"])
+    FD["<b>FrameDispatcher</b><br/>marshals to the UI thread<br/>routes frames by ProtoModId"]
+    MVM["<b>MainViewModel</b><br/>rebuilds all slots on every PresenceReport"]
+    CAT["<b>ModuleCatalog</b><br/>ProtoModId to panel factory<br/><i>the only per-module registration</i>"]
+    PANEL["<b>Panel view models</b><br/>Blinky · AccelTemp · Electronic Load"]
+    MAN["<b>ManualLibrary</b><br/>ProtoModId to manual document"]
+    UI["<b>MainWindow</b><br/>one DataTemplate per view model type"]
+
+    RS --> ISS
+    MS --> ISS
+    ISS --> FD
+    FD --> MVM
+    MVM --> CAT
+    MVM --> MAN
+    CAT --> PANEL
+    PANEL --> UI
+    MAN --> UI
+```
+
+### Connect, identify, panels
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as ProtoVerse App
+    participant Core as ProtoCore
+
+    User->>App: Connect
+    App->>Core: PresenceRequest
+    Core->>Core: identify slots over I2C
+    Core-->>App: PresenceReport [id, id, id]
+    App->>App: build new slot list, then swap it in
+    App-->>User: three slots, panels + manuals
+
+    Note over User,Core: later, a board is swapped
+    Core-->>App: PresenceReport (unsolicited)
+    App->>App: rebuild, restoring selection to the same slot
+```
+
+Identify runs automatically on connect — the boards are expected to just show
+up. The list is **built fully, then swapped in**, so a failure while
+constructing one panel can never disturb slots that are already working, and
+each panel's construction is individually wrapped: one misbehaving module type
+degrades its own slot and nothing else.
+
+### How a slot becomes a panel
+
+```mermaid
+flowchart TD
+    START["ProtoModId reported for slot N"] --> Q1{"None?"}
+    Q1 -->|yes| EMPTY["<b>Empty</b><br/>grey dot"]
+    Q1 -->|no| Q2{"Registered in<br/>ModuleCatalog?"}
+    Q2 -->|yes| LIVE["<b>Live control panel</b><br/>green dot"]
+    Q2 -->|no| Q3{"Listed as<br/>passive?"}
+    Q3 -->|yes| PASSIVE["<b>Passive board</b><br/>green dot · use the switches"]
+    Q3 -->|no| Q4{"Unknown<br/>0xFFE0?"}
+    Q4 -->|yes| UNK["<b>Unrecognised EEPROM</b><br/>orange · fix firmware's catalog"]
+    Q4 -->|no| UNS["<b>Unsupported by this build</b><br/>orange · fix this app"]
+
+    LIVE --> MAN{"Manual<br/>registered?"}
+    PASSIVE --> MAN
+    UNK --> MAN
+    UNS --> MAN
+    MAN -->|yes| WITH["Workspace + manual"]
+    MAN -->|no| WITHOUT["Workspace only"]
+```
+
+Those four non-empty outcomes are four genuinely different facts, and the UI
+distinguishes all of them. Two are gaps to close — in *different* codebases.
+One is finished by design. Collapsing any of them into "unsupported" is how you
+spend an evening debugging the wrong repository.
+
+### A command round trip
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as BlinkyLedViewModel
+    participant Core as ProtoCore
+
+    User->>Panel: pick pattern "Chase"
+    Panel->>Core: Command · SetPattern
+    Core->>Core: apply to every slot holding this type
+    Core-->>Panel: Response · 7-byte full-state snapshot
+    Panel->>Panel: adopt device state (guarded, no echo loop)
+    Panel-->>User: controls + LED indicators updated
+```
+
+**Every property on a panel is populated only from the device's echoed
+state** — never from local optimism. Click a control and nothing moves until
+the hardware confirms it. Blinky's four LED indicators are then animated by a
+local timer that reconstructs the pattern between snapshots, since the protocol
+reports state changes rather than one frame per animation step. That
+reconstruction is an exact match for firmware's real sequences, and the app
+says plainly that it is a re-creation rather than telemetry.
+
+---
+
+## Wire protocol (v1, `Models/ProtocolFrame.cs`)
+
+```
++-------+------------+------------+---------+--------+-----------+----------+-------+
+|  STX  | ProtoModId | ProtoModId | MsgType | Length |  Payload  | Checksum |  ETX  |
+| 0x02  |     lo     |     hi     |         |        |  0-250 B  |   XOR    | 0x03  |
++-------+------------+------------+---------+--------+-----------+----------+-------+
+```
+
+- **ProtoModId** — 2 bytes, little-endian, sized for a catalog expected to pass
+  1,000 types. Reserved IDs live at the top of the range so they read as system
+  addresses: `0xFFE0` Unknown, `0xFFF0` Core, `0xFFFF` Broadcast. A new module
+  means a new ID here *and* in firmware, together.
+- **MsgType** — Command, Response, PresenceRequest, PresenceReport, StreamData,
+  Error.
+- **Checksum** — XOR over both ID bytes, MsgType, Length and every payload
+  byte. No CRC and no byte-stuffing yet: a known, accepted gap at this scale,
+  worth revisiting before wider deployment.
+- **Error codes** (`payload[0]` of an `Error` frame) — `0x01` NotPresent,
+  `0x02` UnknownMsgType, `0x03` BadPayloadLength, `0x04` NotImplemented,
+  `0x05` BadValue.
+
+`ProtocolFrameReader` reconstructs frames incrementally from the byte stream
+with resync-on-error — a bad checksum, bad ETX or oversized Length drops back
+to scanning for STX. It never assumes a whole frame arrives in one read,
+because it usually does not.
+
+### Presence reports are fixed-size, and that matters
+
+`PresenceReport`'s payload is **exactly one `ProtoModId` per physical slot,
+always in slot order** — an empty slot reports `None` rather than being
+omitted.
+
+This replaced a variable-length "only the occupied slots" format after it
+caused a real bug: with one board installed, "module in slot 0" and "module in
+slot 1, others empty" produced byte-identical payloads, so a board in any slot
+but the first always rendered in the first panel. Anything that is not exactly
+`SlotCount x 2` bytes is now rejected outright rather than partially
+interpreted.
+
+---
+
+## Adding a new ProtoMod
+
+```mermaid
+flowchart LR
+    A["1 · ProtoModId<br/><i>this app + firmware</i>"] --> B["2 · Panel view model<br/><i>extends ModulePanelViewModelBase</i>"]
+    B --> C["3 · Register in<br/>ModuleCatalog"]
+    C --> D["4 · DataTemplate in<br/>MainWindow.xaml"]
+    D --> E["<i>optional</i><br/>5 · Manual +<br/>ManualLibrary entry"]
+```
+
+Nothing in `MainViewModel`, the slot-population logic, or the window layout
+changes. Until step 3 is done, a board reporting that ID degrades to an
+"unsupported" placeholder — intentional, since there will always be more
+cataloged ProtoMod types than any single build ships panels for.
+
+A board with **no** software controls skips steps 2 to 4 entirely and is listed
+as passive instead.
+
+---
 
 ## Building and running
 
-Requires the .NET 8 SDK and the ".NET desktop development" workload (Visual
-Studio 2022, or `dotnet` from the command line). From the repo root:
+Requires the .NET 8 SDK and the ".NET desktop development" workload.
 
 ```
 dotnet build ProtoVerseApp.sln
 dotnet run --project ProtoVerseApp/ProtoVerseApp.csproj
 ```
 
-No hardware needed to try it — check **Simulator mode** in the top bar, then
-**Connect**.
+No hardware needed — tick **Simulator mode**, then **Connect**.
 
-## Architecture
+`tools/build_schematics.ps1` regenerates the bundled schematic assets from the
+KiCad sources (requires KiCad 9 and Microsoft Edge, which rasterises the SVG).
 
-```
-Serial port (one connection)
-  -> SerialService        (owns the port + background read thread — nothing else touches it)
-  -> FrameDispatcher       (marshals to the UI thread, routes by ProtoModId, exposes Send/RequestPresence)
-  -> ModuleCatalog         (ProtoModId -> panel view model factory - the only place new ProtoMod types get registered)
-  -> Panel view models     (built dynamically from PresenceReport, one per detected ProtoMod - each filters for its own ProtoModId)
-  -> MainWindow            (ItemsControl bound to the slot collection, one DataTemplate per view model type)
-```
+---
 
-`ISerialService` is the seam Simulator mode plugs into — `FrameDispatcher`
-talks to the interface, not `SerialService` directly, so `MockSerialService`
-can stand in without either side knowing the difference.
+## Status: what is proven, and what is not
 
-## Wire protocol (v1, defined in `Models/ProtocolFrame.cs`)
+This project distinguishes *compiles*, *works in the simulator*, and *confirmed
+against real hardware*, and does not round one up to another.
 
-```
-[STX 0x02] [ProtoModId_lo] [ProtoModId_hi] [MsgType] [Length] [Payload...] [Checksum] [ETX 0x03]
-```
+| Area | Status |
+|---|---|
+| **Blinky LED (F01)** | Confirmed on hardware. Real commands, device-echoed state, no placeholders. |
+| **Electronic Load (E05)** | Wire format settled and confirmed on hardware across a full 1-300 mA sweep. |
+| **Simple LED (F02)** | Passive board; identity confirmed. No commands exist to verify. |
+| **Accel + Temp (E03)** | UI complete — temperature trend, X/Y tilt plot, Z fill gauge — but the payload layout is an explicit placeholder pending firmware defining the real command set. |
+| **Presence + hot-swap** | Confirmed on hardware. Fault isolation additionally verified by deliberate fault injection. |
+| **Disconnect on cable pull** | Handled and regression-tested, but never reproduced against a genuinely hung OS handle. |
+| **In-app manuals** | Rendering verified end to end. Manual *content* is sourced from real documents; anything unsourced is flagged in-app. |
+| **E05 rejecting >300 mA** | **Disputed.** Documentation says it is rejected; a bench report says 400 mA is accepted; firmware source review says otherwise again. Unresolved, and deliberately not papered over. |
 
-- **ProtoModId** (`Models/ProtoModId.cs`) — 2 bytes, little-endian, sized for
-  a catalog expected to eventually exceed 1,000 ProtoMod types. Fixed
-  vocabulary shared with firmware: `0x0001` BlinkyLed, `0x0002` AccelTemp,
-  `0x0003` ElectronicLoad, `0x0004` BasicLed, `0xFFE0` Unknown (a slot with a
-  valid but uncataloged EEPROM read — distinct from an empty slot), `0xFFF0`
-  Core (ProtoCore itself), `0xFFFF` Broadcast (reserved). Add new IDs here
-  *and* in firmware together whenever a new ProtoMod type is introduced.
-- **MsgType** (`Models/MsgType.cs`) — Command, Response, PresenceRequest,
-  PresenceReport, StreamData, Error.
-- **Checksum** — XOR of both ProtoModId bytes, MsgType, Length, and every
-  payload byte. No CRC, no byte-stuffing/escaping yet — a known, accepted gap
-  at the current scale, worth revisiting before wider deployment.
-- **Max payload** — 250 bytes per frame. Anything bigger (bulk waveform data)
-  should be split across multiple `StreamData` frames rather than growing
-  this.
-- **Error codes** (payload[0] of an `Error` frame, confirmed against
-  firmware's `protocol.h`) — `0x01` NotPresent, `0x02` UnknownMsgType, `0x03`
-  BadPayloadLength, `0x04` NotImplemented, `0x05` BadValue.
-
-`ProtocolFrameReader` in the same file is a small state machine that
-reconstructs frames from a raw byte stream incrementally, with resync-on-error
-(a bad checksum/ETX/oversized Length drops back to scanning for STX) — it
-doesn't assume a whole frame arrives in one serial read, since it usually
-won't.
-
-### Presence detection
-
-`PresenceRequest`/`PresenceReport` are addressed to `Core`. The report's
-payload is a **fixed-size** array — exactly one `ProtoModId` per physical
-slot, always in slot order, 2 bytes little-endian each — not a variable-length
-list of only the occupied slots; an empty slot reports `ProtoModId.None`
-rather than being omitted. (This replaced an earlier skip-empty-slots format
-after it caused a real bug: with only one slot occupied, "module in slot 0"
-and "module in slot 1" produced an identical single-entry payload.)
-`MainViewModel.OnFrameReceived` rebuilds all slots from that fixed list on
-every report — sent in reply to a request, and also unsolicited if ProtoCore
-detects a hot-swap on its own, so slots update live without needing another
-click.
-
-## ProtoMod Library
-
-The **Library** tab (next to **Slots** in the main content area) shows the
-whole ProtoMod catalog, not just what's plugged into the ProtoCore right now.
-It's a discovery surface: every module is shown at full strength — never
-dimmed, locked, or hidden — with one of three connection states:
-
-| Badge | Meaning | Accent |
-|---|---|---|
-| **Connected now** | In a slot in the most recent `PresenceReport` | green |
-| **In your kit** | The user said it's theirs | teal |
-| **Connected before** | Seen at some point, not answered for yet | teal |
-| **Not in your kit** | The user said it isn't theirs | blue |
-| **Not yet connected** | Never seen by this profile | blue |
-
-Two independent facts are tracked per module, and the app is careful not to
-conflate them:
-
-- **Has it been plugged in?** Observed automatically from `PresenceReport` —
-  the same report that populates the Slots tab, so the two can't disagree.
-- **Does the user say it's theirs?** Only ever set by clicking. Seeing a
-  board proves it was plugged in, not that it belongs to anyone — a borrowed
-  or classroom board is the obvious case. So the first time a board is seen,
-  its card asks "Is this ProtoMod part of your kit?" with **Yes, it's mine**
-  / **No, just borrowed**, and the answer is always one click from being
-  flipped afterwards. Nothing is ever silently claimed on the user's behalf.
-
-### Profiles
-
-Board tracking is per profile, so two people sharing a PC don't merge kits.
-The control in the window's top right shows who's signed in, with
-**Sign in** / **Switch** / **Sign out**; the picker lets you create a
-profile, pick an existing one, or delete one.
-
-**These profiles are not a security feature and aren't meant to be.** There
-is no password and no encryption — signing in is picking a name off a list,
-and every profile's data sits in one readable JSON file
-(`%AppData%\ProtoVerse\accounts.json`, written by
-`Services/AccountStore.cs`). Their job is separating one person's tracking
-from another's, not keeping anyone out. Don't add a password field later
-without making it mean something: a fake login that looks real is worse than
-an obviously informal one.
-
-While signed out, the catalog still shows in full — only the tracking is
-hidden, and nothing is recorded.
-
-**Tracking is stored app-side, never on ProtoCore.** Putting it in firmware
-was considered and rejected (2026-08-31): it belongs to a person, not a
-board. A shared classroom ProtoCore would give every student the same wrong
-answer, a reflash would silently delete it, and a second ProtoCore would know
-nothing about the first. **No wire-protocol or firmware change is involved at
-all** — the app already receives every `PresenceReport`, so it simply records
-what it already sees. The on-disk document is deliberately close to what a
-real server-backed account would send (stable id, display name, flat list of
-per-module records), so moving it behind a real account later is a change to
-where `AccountStore` reads and writes, not a change to its callers.
-
-The tab is read-only over the wire. It sends no frames and touches no module
-control logic.
-
-**Catalog content is hardcoded for v1, on purpose**
-(`Models/ProtoModLibraryCatalog.cs`). It should eventually move to a
-JSON/manifest source generated from — or shared with — the ProtoMod manual
-documents in `PROTOVERSE/Manuals/`, so a new module's catalog entry falls out
-of writing its manual instead of being transcribed by hand. The record types
-are already flat and JSON-friendly, and `ProtoModLibraryCatalog.Entries` is
-the only thing the rest of the app reads, so that swap should be a change to
-that one file.
-
-**Nothing in the catalog is invented.** Every description, schematic summary,
-project idea, and "leads into" link is quoted from, or directly summarized
-from, a document that actually exists — the module manuals in
-`PROTOVERSE/Manuals/`, the KiCad schematic exports in
-`PROTOVERSE/Finished Modules/`, or this repo's own `CLAUDE.md`. Each entry
-carries the source it came from, and the UI displays it. Where no source
-material exists (no manual written, no difficulty rated, no documented next
-step), the field is left null and the card says "coming soon" rather than
-being filled with plausible-sounding text. Two things to know when editing it:
-
-- **Progression links are not inferred.** A "leads into" link only exists
-  where a manual actually says one module leads into another. Today that's a
-  single link — F01 → F02, from the Blinky manual's "Future ProtoMods for
-  you" section. Circuit-code order, series, and difficulty are *not* treated
-  as evidence of a teaching sequence.
-- **Family is the one field that may be derived.** Every ProtoMod belongs to
-  one of three families, keyed by the first letter of its circuit code:
-  **F → Fundamentals, E → Explorers, A → Advanced** (confirmed as a product
-  rule, 2026-08-31). So a board with no manual written yet still gets a
-  correct family. Nothing else may be derived this way.
-
-The filter row above the grid pins the view to one family, with the catalog
-split shown in each button's count. "All" is the default — the tab's job is
-showing the whole catalog, so filtering is opt-in. Following a "leads into"
-link that points outside the active family resets the filter to All, so the
-link can never highlight a card that's been filtered out of view.
-
-## Diagnosing a real hardware problem
-
-The Traffic Log (collapsed by default, bottom of the window) is the first
-stop when something doesn't behave as expected against real hardware. Every
-frame sent and received is shown both as raw hex (nothing hidden) and as a
-plain-English decode via `Models/FrameInterpreter.cs` — e.g.
-`SetCurrentLimitMa: 100 mA` or `Error: PROTOCOL_ERR_NOT_IMPLEMENTED (0x04)`
-instead of a hex blob you'd have to decode by hand. Framing/checksum errors
-and disconnect events show up here too, capped at the last 500 entries.
-
-## Adding a new ProtoMod's panel
-
-Because panels are built dynamically from `PresenceReport`, supporting a new
-ProtoMod type never touches `MainViewModel` or the slot-population logic:
-
-1. Add the `ProtoModId` (`Models/ProtoModId.cs`) and, in firmware, the
-   matching ID.
-2. Write the panel view model (extend `ModulePanelViewModelBase`) and its
-   view.
-3. Register `ProtoModId -> factory` in `ViewModels/ModuleCatalog.cs`.
-4. Add a `DataTemplate` for the new view model type in `MainWindow.xaml`.
-
-Until step 3 is done for a given ID, a module reporting that ID shows up as
-an "Unsupported module" placeholder instead of a real panel — intentional
-degradation, not a bug, since there will always be more cataloged ProtoMod
-types than any single app build has panels for.
+---
 
 ## More detail
 
-- `CLAUDE.md` — the current, living state of the project: what's settled,
-  what's still provisional, gotchas already hit, and platform decisions
-  already made.
-- `CHANGELOG.md` — a chronological, dated log of every change and why it was
-  made.
+| File | What is in it |
+|---|---|
+| `CLAUDE.md` | The living state of the project — what is settled, what is provisional, decisions already made, and gotchas already paid for. |
+| `CHANGELOG.md` | Every change, dated, with the prompt that drove it and why. |
+| `EVALUATION.md` | The in-app manuals spike: recommendation, effort estimate, and the findings that changed it. |
