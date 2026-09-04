@@ -26,10 +26,19 @@ namespace ProtoVerseApp.Models.Manual
     ///
     /// DELIBERATELY FEWER SECTIONS than the template's twelve. The reference manual's
     /// eight body sections plus three appendices made for a lot of headings on one
-    /// scroll; this is five body sections and two appendices, with Setup and "now try
-    /// this" merged, Observations carrying the value table, and the creative challenge
-    /// and reflection questions sharing one "Go further" section. The schematic moved
-    /// out of an appendix entirely and is linked from the top of the manual.
+    /// scroll; this is five body sections and a single appendix, with Setup and "now
+    /// try this" merged and the creative challenge and follow-up questions sharing one
+    /// "Go further" section. The schematic moved out of an appendix entirely and is
+    /// linked from the top of the manual, and the answer-key appendix is gone because
+    /// the questions are multiple choice and explain themselves once answered.
+    ///
+    /// ONE CLAIM HERE CONTRADICTS THE PROJECT DOCS, ON PURPOSE. CLAUDE.md and firmware's
+    /// own source describe SetCurrentLimitMa as range-checked, rejecting anything above
+    /// MAX_CURRENT_MA (300) with PROTOCOL_ERR_BAD_VALUE. The real board does not do that:
+    /// commanding 400 mA returns 400 mA at 100% duty, reported by the user against
+    /// hardware on 2026-08-31. Hardware wins over documentation, so the manual describes
+    /// what the board does. It turns out to teach the module's own point better than the
+    /// rejection did - see section 4.
     /// </summary>
     public static class ElectronicLoadManual
     {
@@ -55,7 +64,7 @@ namespace ProtoVerseApp.Models.Manual
                         "An electronic load is a resistor you set in software. Instead of choosing a resistance and letting Ohm's law decide the current, you name the current you want and the circuit arranges itself to draw it - turning the power it pulls into heat. That makes it a test instrument: it lets you ask a power source \"what do you do when I demand this much from you?\""),
                     new BulletsBlock(new[]
                     {
-                        "You command a current from 0 to 300 mA, in milliamps, from software.",
+                        "You command a current in milliamps from software. 0 to 300 mA is the range the board is built for.",
                         "ProtoCore generates that command as a PWM signal, which an op-amp turns into a real current through a 10 Ω sense resistor.",
                         "The board is open-loop on this revision: nothing on it measures what the current actually is.",
                         "So it reports back the current you asked for and the PWM duty cycle it is driving - and never a measurement.",
@@ -87,7 +96,7 @@ namespace ProtoVerseApp.Models.Manual
                     new ParagraphBlock(
                         "That trust is mostly justified, and firmware helps it along: rather than the textbook ratio, it applies a correction measured against real hardware, because the 3.3 V rail is never exactly 3.3 V and the op-amp is not ideal. But nothing in the loop closes. If the supply sags, if the resistor warms and drifts, if a connection is poor - the board neither knows nor tells you."),
                     new CalloutBlock(CalloutKind.TechNote,
-                        "Firmware's calibration constants are CAL_SLOPE_MV_PER_MA = 9.3828 and CAL_OFFSET_MV = 32.906. They overshoot the naive formula on purpose, to compensate for a rail sitting below its nominal value. At the 300 mA maximum the duty reports 95%, not 100% - expected, not a fault.",
+                        "Firmware's calibration constants are CAL_SLOPE_MV_PER_MA = 9.3828 and CAL_OFFSET_MV = 32.906. They overshoot the naive formula on purpose, to compensate for a rail sitting below its nominal value. At 300 mA - the top of the board's designed range - the duty reports 95%, not 100%. Expected, not a fault.",
                         "Tech note - real constants"),
                     new BulletsBlock(new[]
                     {
@@ -123,8 +132,11 @@ namespace ProtoVerseApp.Models.Manual
                             "Before you send the next one, predict the duty yourself. Then send it and check.",
                             Observe: "Is the gap between your prediction and the reported figure constant, or does it grow with current? That gap is the calibration correction, and its shape tells you what kind of error it was written to cancel."),
                         new ManualStep(
-                            "Command 300 mA, then try 400 mA.",
-                            Observe: "300 mA is the ceiling. Open the Traffic Log at the bottom of the window and look at what came back from the 400 mA attempt - the board rejects it outright rather than quietly clamping. Silent clamping would have been the more dangerous design. Why?"),
+                            "Command 300 mA, then deliberately overshoot: ask for 400 mA, well past the range the board is built for.",
+                            Observe: "It comes back 400 mA at 100% duty, with no complaint. Neither number is a measurement, and the duty has now run out of room - it is a percentage, so it cannot go above 100. If asking for more no longer moves the duty, what happens to the actual current for every extra milliamp you type?"),
+                        new ManualStep(
+                            "Find where that happens. Come back down and step up from 300 mA a few milliamps at a time, watching for the first commanded value that reports 100%.",
+                            Observe: "Above that value the echoed current keeps rising and nothing physical changes. The board is repeating your request, not confirming it."),
                         new ManualStep(
                             "Now put the meter in the load path and measure the actual current at two or three settings. Compare each reading against the number you commanded."),
                     }, Numbered: true, Heading: "Now try this"),
@@ -135,15 +147,15 @@ namespace ProtoVerseApp.Models.Manual
                 {
                     new BulletsBlock(new[]
                     {
-                        "The commanded current always echoes back exactly as sent - it is your own number returning to you.",
+                        "The commanded current always echoes back exactly as sent - it is your own number returning to you, whether or not the board can deliver it.",
                         "The reported duty rises by roughly 1% for every 3 mA commanded.",
                         "At 300 mA the duty reports 95%, not 100%.",
-                        "Commanding more than 300 mA produces an explicit error, not a clamped value.",
+                        "Past the top of the range the duty pegs at 100% and stops rising, while the echoed current keeps climbing with whatever you type - ask for 400 mA and you are told 400 mA at 100% duty.",
                         "Your meter reads close to the commanded current, but almost certainly not exactly.",
                     }, Heading: "What you should see"),
                     new SubheadingBlock("Why it works"),
                     new ParagraphBlock(
-                        "Every one of those observations except the last comes from the command path alone. Firmware takes your current, runs it through the calibration to get a duty, drives the PWM at that duty, and reports both numbers back. Nothing in that round trip touches the load. It can reject 400 mA without measuring anything, because the limit is a constant it already knows."),
+                        "Every one of those observations except the last comes from the command path alone. Firmware takes your current, runs it through the calibration to get a duty, drives the PWM at that duty, and reports both numbers back. Nothing in that round trip touches the load. That is why 400 mA can be accepted and repeated back to you without anything being measured: there is nothing in the loop in a position to disagree with you."),
                     new ParagraphBlock(
                         "The last observation is the only one that required an instrument, and it is the only one that tells you what the circuit actually did. Everything else was the board describing its own intentions."),
                     new CalloutBlock(CalloutKind.Observe,
@@ -159,37 +171,85 @@ namespace ProtoVerseApp.Models.Manual
                     new BulletsBlock(new[]
                     {
                         "Calibrate the board against your meter: sweep the commanded current, record what you actually measure at each point, and produce a correction curve. How linear is the error?",
-                        "Find where it stops behaving. Push toward 300 mA and watch whether measured current keeps tracking commanded current as faithfully at the top of the range as at the bottom.",
+                        "Find where it stops behaving. With the meter connected, push past 300 mA and watch what the measured current does once the reported duty has pegged at 100%.",
                         "Work out the duty resolution by hand: command currents 1 mA apart and find the smallest change that moves the reported duty at all. What does that tell you about the finest current step this board can really make?",
                     }),
                     ManualBoilerplate.NoSingleCorrectAnswer,
-                    new SubheadingBlock("Follow-up & reflection questions"),
-                    new QuestionsBlock("reflection", new[]
+                    new SubheadingBlock("Check yourself"),
+                    // Multiple choice rather than free text: the app knows the answer,
+                    // so it can mark the question the instant it's answered and explain
+                    // why. A written answer can only ever be marked by the learner, who
+                    // is the person in the room least able to do it.
+                    new MultipleChoiceBlock("reflection", new[]
                     {
-                        "The board reports a current and a duty cycle. Which of those two is a measurement, and which is a restatement of what you asked for?",
-                        "Why does fixing a voltage across a known resistor also fix the current through it?",
-                        "Firmware's calibration deliberately overshoots the textbook duty for a given current. What real-world imperfection is that overshoot compensating for?",
-                        "This board rejects a 400 mA request instead of clamping it to 300 mA. Why might an explicit refusal be safer than a silent adjustment?",
-                        "If you were asked to make this a closed-loop instrument that could report its true current, what would you have to add - and what would become possible that isn't now?",
-                    }),
+                        new ManualChoiceQuestion(
+                            "The panel reports a current and a duty cycle. Which of them is a measurement?",
+                            new[]
+                            {
+                                "The current - it comes from a sense amplifier on the load path.",
+                                "Neither. The current is your own command echoed back, and the duty is what firmware chose to drive.",
+                                "Both. Firmware samples them each time you press Apply.",
+                                "The duty - it is measured at the op-amp's output.",
+                            },
+                            CorrectIndex: 1,
+                            Explanation: "Neither number is a measurement of the load. The current is the value you sent, returned unchanged. The duty is real in that it is genuinely what firmware is driving, but it describes the board's output, not the current actually flowing through the resistor. There is no sensing anywhere on the current path on this revision."),
+
+                        new ManualChoiceQuestion(
+                            "Why does fixing a voltage across a known resistor also fix the current through it?",
+                            new[]
+                            {
+                                "The op-amp delivers a constant current no matter what voltage appears across the resistor.",
+                                "The resistor changes value to suit whatever voltage it is given.",
+                                "Ohm's law ties voltage, current and resistance together, so fixing two of them leaves the third only one value it can take.",
+                                "It doesn't - the current is set by the supply, not by the resistor.",
+                            },
+                            CorrectIndex: 2,
+                            Explanation: "The resistance is fixed by construction and the op-amp holds the voltage across it fixed. With two of the three quantities pinned, Ohm's law leaves the current no freedom at all. This is the same law you met setting an LED's brightness, used in the opposite direction: there you chose a resistor to get a current, here the current follows from a voltage you chose."),
+
+                        new ManualChoiceQuestion(
+                            "Firmware's calibration deliberately asks for a higher duty than the textbook formula does. What is that overshoot compensating for?",
+                            new[]
+                            {
+                                "A 3.3 V rail that in practice sits a little below 3.3 V, plus a non-ideal op-amp stage.",
+                                "The sense resistor being 20 Ω rather than the 10 Ω the formula assumes.",
+                                "Rounding error in the PWM timer.",
+                                "The resistance of the USB cable feeding the board.",
+                            },
+                            CorrectIndex: 0,
+                            Explanation: "A duty computed from an assumed 3.3 V under-delivers against a rail that is actually lower, so the correction pushes it up. This is why 300 mA reports 95% rather than the ~91% the clean formula predicts - the constants were fitted against real hardware, not derived on paper."),
+
+                        new ManualChoiceQuestion(
+                            "You command 400 mA - past the range the board is built for - and the panel reports 400 mA at 100% duty. What has actually happened?",
+                            new[]
+                            {
+                                "The board measured 400 mA and confirmed it.",
+                                "The board is drawing 400 mA, since it reported the value back.",
+                                "100% duty means the current is at its most accurate.",
+                                "The command was accepted and repeated back, and the duty has run out of headroom - so the circuit cannot follow any further increase.",
+                            },
+                            CorrectIndex: 3,
+                            Explanation: "The echo confirms nothing: it repeats whatever number you sent. Duty is a percentage and cannot exceed 100%, so once it saturates, asking for more changes the number on screen and nothing else. This is the module's central point in its sharpest form - the display and the circuit have quietly stopped agreeing, and the board has no way to tell you."),
+
+                        new ManualChoiceQuestion(
+                            "What would it take to make this a closed-loop instrument that could report its true current?",
+                            new[]
+                            {
+                                "A higher PWM frequency, so the averaged voltage is smoother.",
+                                "A sense amplifier across the existing resistor feeding an ADC, plus firmware comparing that measurement against the setpoint.",
+                                "A larger sense resistor, giving a bigger voltage to work with.",
+                                "A second op-amp in parallel with the first.",
+                            },
+                            CorrectIndex: 1,
+                            Explanation: "A loop needs a measurement to close around. With current sensed and read back, firmware could report what is really flowing, correct for drift and load changes on its own, and spot faults such as an open circuit - none of which this revision can do. The other options change the analog stage but leave firmware just as blind as before."),
+                    }, Heading: "Follow-up questions"),
                 }),
 
-                // ====================================================== Appendix A
-                new ManualSection("appendix-a", "Appendix A - Answer key", new ManualBlock[]
-                {
-                    new ParagraphBlock("Attempt the reflection questions before reading this."),
-                    new BulletsBlock(new[]
-                    {
-                        "Neither is a measurement of the load. The current is your own commanded value echoed back; the duty cycle is real in that it is genuinely what firmware is driving, but it describes the board's output, not the current actually flowing.",
-                        "Ohm's law relates the three quantities, so fixing any two fixes the third. The resistor's value is fixed by construction and the op-amp holds the voltage across it fixed, which leaves the current with only one value it can take.",
-                        "Mainly a supply rail that sits below its nominal 3.3 V, plus non-ideal behaviour in the op-amp stage. A duty computed from an assumed 3.3 V would under-deliver against a rail that is actually lower, so the correction pushes it up.",
-                        "A clamped value would leave the caller believing they got what they asked for. An error makes the disagreement visible at the moment it happens, which is the only point at which it is cheap to notice - especially on a board that reports no measurements to contradict the assumption later.",
-                        "You would need a sense amplifier across the existing resistor feeding an ADC, and firmware to close the loop by comparing measurement to setpoint. That would make the board able to report true current, correct for drift and load changes on its own, and detect faults such as an open circuit - none of which it can do today.",
-                    }),
-                }, IsAppendix: true, IsSpoiler: true),
-
-                // ====================================================== Appendix B
-                new ManualSection("appendix-b", "Appendix B - Facilitator notes", new ManualBlock[]
+                // ======================================================= Appendix
+                // No answer-key appendix. Section 5's questions are multiple choice and
+                // explain themselves the moment they're answered, so a key here would be
+                // the same text in a second place - two copies that can drift apart, and
+                // a spoiler section that spoils questions already answered.
+                new ManualSection("appendix-a", "Appendix - Facilitator notes", new ManualBlock[]
                 {
                     new SubheadingBlock("Timing guide"),
                     new ParagraphBlock(
@@ -198,9 +258,13 @@ namespace ProtoVerseApp.Models.Manual
                     new BulletsBlock(new[]
                     {
                         "Reading the echoed current as a measurement. This is the central point of the module and it catches experienced engineers too - the number looks like telemetry because it arrives from the hardware.",
+                        "Believing the board enforces its own 300 mA limit. It does not. Ask for 400 mA and it answers 400 mA at 100% duty, exactly as if nothing were wrong - which is precisely why the echo is worth distrusting.",
                         "Expecting the load to push current into a source. It only sinks; it can pull current out of a source, never supply it.",
                         "Assuming the reported duty is wrong because it doesn't match the textbook formula. The calibration overshoot is deliberate and documented.",
                     }),
+                    new SubheadingBlock("Answers"),
+                    new ParagraphBlock(
+                        "Section 5's questions are multiple choice and mark themselves. Choosing an option reveals both the correct answer and the reasoning behind it, so there is no separate key to hand out - and no way for a learner to read the answers before committing to one."),
                     new SubheadingBlock("Extension ideas"),
                     new BulletsBlock(new[]
                     {

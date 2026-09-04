@@ -44,4 +44,17 @@ namespace ProtoVerseApp.Converters
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
             value is not Visibility.Visible;
     }
+
+    /// <summary>Plain boolean negation. Used where something should stop responding
+    /// rather than disappear - an answered multiple-choice question freezes its options
+    /// but must keep them readable, so IsHitTestVisible is the property being inverted,
+    /// not Visibility.</summary>
+    public class InverseBoolConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+            value is not true;
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+            value is not true;
+    }
 }

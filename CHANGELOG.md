@@ -2600,3 +2600,302 @@ step, no "auto-identifies on connect" observe; "You'll also need" kept; no
 remain (five reflection answers plus the Library search box). Section list
 unchanged at five body sections plus two appendices. The cropped PNG was
 inspected directly and shows every designator, value and pin name intact.
+
+---
+
+### 52. Self-marking questions, a hardware correction, and a monochrome schematic
+
+**2026-08-31, 23:55 CDT**
+
+**Prompt:** three changes. (1) Make section 5's follow-up questions multiple
+choice, to simplify how answers are checked. (2) "If I command 400mA the board
+definitely responds with 400mA and 100% duty cycle unlike what the ceiling
+behavior that is described. I like what is described but that's not what
+happens." (3) The schematic image shouldn't use KiCad's colours - keep it black
+and white, preferably a black background with white graphics, inverting if need
+be.
+
+**Purpose:** Let the app mark the questions it already knows the answers to;
+describe the board that exists rather than the one the docs describe; and stop
+the one figure in the manual from being a bright rectangle in a dark app.
+
+**Changes - multiple choice:**
+- `Models/Manual/ManualBlocks.cs` - new `MultipleChoiceBlock` and
+  `ManualChoiceQuestion` (options, correct index, explanation). `QuestionsBlock`
+  stays for questions with no checkable answer, with a note preferring the new
+  block wherever an answer *can* be checked: free text puts the marking on the
+  learner, who is the person least able to do it.
+- `ViewModels/ManualViewModel.cs` - `ChoiceQuestionViewModel`,
+  `ChoiceOptionViewModel`, `MultipleChoiceViewModel` and a `ChoiceState` enum
+  (Idle/Right/Wrong) so one DataTrigger picks each option's treatment. The first
+  answer stands; further clicks are ignored, so the question can't be turned
+  into a lock to pick. The correct option is always marked, right or wrong.
+- `Views/ManualView.xaml` - option rows with A/B/C/D labels (a letter to refer
+  to out loud, which matters when someone is being helped through a module),
+  green for the right answer, orange for a wrong pick, and the explanation
+  revealed underneath either way. An answered question freezes via
+  `IsHitTestVisible` rather than `IsEnabled`, because a greyed-out answer is
+  hard to read and reading it is exactly what should happen next.
+- `Converters/BoolToVisibilityConverters.cs` - `InverseBoolConverter`,
+  registered in `App.xaml`.
+- **Appendix A (the answer key) is gone**, and Appendix B is now simply
+  "Appendix - Facilitator notes". With every explanation attached to its own
+  question, a key would be the same text in a second place, free to drift out of
+  step, gating answers to questions the learner has already answered. The
+  facilitator notes now say where the answers live instead.
+
+**Changes - the 400 mA correction:**
+- The manual previously said commanding 400 mA produced an explicit
+  `PROTOCOL_ERR_BAD_VALUE` rejection rather than a silent clamp, and asked the
+  learner why refusing is safer than clamping. That is what `CLAUDE.md` and
+  firmware's own source describe, and it is **not what the board does**: it
+  accepts 400 mA, echoes 400 mA back, and reports 100% duty. Reported by the
+  user against real hardware, so hardware wins and the manual now describes it.
+- It teaches the module's own point better than the rejection did. The echo
+  confirms nothing, and at 400 mA the duty has run out of headroom - it is a
+  percentage and cannot exceed 100% - so the number on screen and the current in
+  the circuit have quietly stopped agreeing, with no way for the board to say
+  so. Section 3 gained a step asking the learner to find the commanded value
+  where duty first reads 100%; section 4's bullet and prose were rewritten;
+  Appendix B gained "believing the board enforces its own 300 mA limit" as a
+  misconception. The 95%-at-300 mA figure is unchanged - that one *is*
+  hardware-verified, by the sweep in entry 42.
+
+**Changes - white-on-black schematic:**
+- `tools/build_schematics.ps1` - every `stroke:#RRGGBB` and `fill:#RRGGBB` in
+  the exported SVG is recoloured white (`none` values left alone, so unfilled
+  symbol bodies don't become white blobs), and a black rect covering the cropped
+  viewBox is inserted as the first element. The black has to be drawn rather
+  than styled: Edge screenshots the page background, which defaults to white.
+  Raster resolution raised 4 → 8 px/mm, since the manual displays the PNG at
+  ~290px tall and downscaling from higher keeps hairline wires legible.
+- `Views/ManualView.xaml` - the image card is black instead of white, so the
+  figure has no visible seam where the PNG's own background ends.
+- The linked PDF is untouched and still in full colour. That is the reference
+  drawing and it opens in its own viewer, where KiCad's palette is at home.
+
+**Verification.** UI Automation, Simulator mode. Templated option buttons expose
+no name or child text through UIA, so they were found by geometry (unnamed,
+invokable, full manual width, under 150px tall - which excludes the 279px-tall
+image button and the 17px-wide scrollbar buttons) and sorted by Y: exactly 20
+found, 4 per question. Before answering, no mark and no explanation is present.
+Answering Q1 wrongly shows "Not quite", reveals that question's explanation, and
+leaves exactly one mark on screen with the other four explanations still hidden;
+re-clicking the correct option afterwards does not change the mark. Answering Q4
+and Q2 correctly brings the mark count to 3 with 2 correct. Section list is now
+five body sections plus one appendix, no "Answer key". The old "rejects it
+outright" and "produces an explicit error" strings are gone and the new
+pegged-duty bullet and overshoot step are present. The regenerated E05 PNG was
+viewed directly: white on black, every designator, value and pin name intact.
+
+**A false alarm worth recording, since it nearly became a bug report.** A first
+pass asserted the explanation text was visible before answering. It wasn't - the
+test regex `Neither number is a measurement` also matched a sentence written
+into section 3's Observe prompt, which is legitimately on screen. The stricter
+string (`...of the load`) was correctly absent. A loose assertion in a UI test
+fails in the direction of inventing defects, which costs more than it saves.
+
+---
+
+### 53. Manual authoring policy: E05 as the template, and per-family difficulty
+
+**2026-09-01, 00:40 CDT**
+
+**Prompt:** "for future labs use E05 as a general template adjusting where
+necessary. Ensure that fundamental manuals assume a much much lower
+understanding of circuitry and the manual is primary seeking to build on that
+understanding and linking it to observations with hardware. Store this info in
+CLAUDE.md"
+
+**Purpose:** Record two standing content decisions so a future session writing
+a manual inherits them instead of re-deriving a structure or mispitching the
+reading level.
+
+**Changes:** `CLAUDE.md` only — no code. A new "In-app manuals" entry under
+Current state covering (1) E05's five-body-sections-plus-one-appendix shape,
+inline circuit image with the full PDF linked at top, inline `Observe` prompts,
+self-marking multiple choice and therefore no answer key, and no assembly
+steps; and (2) that Fundamentals (F) manuals must assume far less prior
+knowledge than E05's mid-series Explorers voice — building the concept in plain
+language first, then tying it to something the learner watches the hardware do,
+with "has never used a multimeter" as the default reader.
+
+**Why it's in CLAUDE.md rather than only on the eval branch:** it's content
+policy and outlives `eval/in-app-manuals-e05` whatever happens to that branch.
+The entry also flags which of E05's choices are hardware-specific rather than
+template rules — it has no chart because that board revision can measure
+nothing — so they don't get copied forward as conventions.
+
+**Related, still open:** E05's manual asserts the disputed >300 mA behaviour
+(400 mA accepted, duty 100%) in about six places. See entry 52 and the
+Electronic Load section of `CLAUDE.md`; the topic is parked at the user's
+direction and the content is unchanged pending a real capture.
+
+---
+
+### 54. Blinky (F01) manual — the first one written from the E05 template
+
+**2026-09-01, 01:35 CDT**
+
+**Prompt:** "make a manual for F01 - ask any questions if information is not
+available to you"
+
+**Purpose:** Produce the second in-app manual, and the first written to the
+authoring policy set in entry 53 — E05 as the structural template, pitched for
+a Fundamentals reader.
+
+**Source material, and how far it could be trusted.** Unlike E05, F01 has a
+complete Gen2 manual (`PROTOVERSE/Manuals/Gen2/F01_Blinky_Manual.docx`) that
+describes the board that actually exists. Its technical content was checked
+against the KiCad schematic before being used, rather than taken on trust:
+D1-D4 green LEDs, 100 ohm series resistors R1-R4, driven from GPIO1-GPIO4, with
+an AT24CS02-SSHM EEPROM (U1) on the I2C identification bus — matching Appendix C
+exactly. So the forward-voltage and ~13 mA figures are used as the manual states
+them. That check is the whole reason E05 went wrong, and it is now cheap.
+
+**Three adaptations the Word manual needed, all settled with the user rather
+than guessed:**
+- **Its activities assume the learner writes firmware** ("set LED1's pin HIGH").
+  No such path exists — the app is the whole interface. Section 3 is rewritten
+  around the real panel, and states plainly that clicking an LED indicator *is*
+  driving that pin HIGH, so the concept still lands.
+- **Its Creative Challenge asks the learner to invent a chase and a scanner** —
+  both of which firmware already ships as selectable patterns, so quoting it
+  unchanged would ask someone to build what a dropdown already does. Reworked
+  into predict-then-check against the built-in patterns (predict Chase's
+  direction and end behaviour, then Bounce's full six-step sequence, before
+  selecting either), keeping the 4-bit binary counter as the hands-on build
+  because firmware genuinely doesn't do that one and it works by clicking the
+  four LED toggles.
+- **It points twice at a "Logic ProtoMod"** as what comes next. No such board
+  has a circuit code or a catalog entry, so those references are dropped —
+  pointing a learner at hardware that doesn't exist is exactly the promise the
+  no-fabrication rule exists to prevent. The F02 progression, which is real and
+  sourced, is kept.
+
+**Pitched for Fundamentals**, which is the main way it differs from E05: voltage
+and current are explained before they are used, ground is defined, terms are
+introduced the first time they appear, the steps are smaller and nearly all
+carry an `Observe`, and the multimeter step spells out where to put the probes
+because "has never used a multimeter" is the default reader. E05 can open with
+"an electronic load is a resistor you set in software"; this one cannot assume
+the reader knows what a resistor does.
+
+**Changes:**
+- `Models/Manual/BlinkyManual.cs` (new) — five body sections plus one appendix,
+  the F01 circuit image inline in the Overview, four self-marking multiple-choice
+  questions (three derived from the source manual's own questions and answer key,
+  one new on what the series resistor is actually for).
+- `Models/Manual/ManualLibrary.cs` — one line registering it.
+- `Models/ProtoModLibraryCatalog.cs` — **fixed a real error found while sourcing
+  this**: the F01 entry cited its manual as `Blinky_F01_Manual.docx`; the file is
+  `F01_Blinky_Manual.docx`. That path is displayed on the Library card, so it was
+  a broken reference shown to users.
+- `CLAUDE.md` — records that two manuals now exist and adds a third authoring
+  rule covering the two problems above, neither of which is visible from the
+  `.docx` alone.
+
+**One distractor worth noting**, since it is the kind of thing that makes a
+multiple-choice question teach rather than test: the resistor question offers
+"it converts the pin's 3.3 V down to the 2 V the LED can survive". That is the
+common beginner model and it is wrong in an instructive way — the resistor does
+end up with ~1.3 V across it, but as a consequence, not a purpose. The LED
+settles at its own forward voltage; the resistor decides the current. The
+explanation says so.
+
+**Verification.** UI Automation, Simulator mode. Header renders (Blinky,
+Fundamentals Series, Beginner, 20-30 min, Prerequisites None); section list is
+1-5 plus one appendix; the schematic button resolves to `F01_schematic.pdf` and
+is byte-identical (MD5) to `Finished Modules\...\Protomod_Blinky_Rev01.pdf`; one
+circuit image renders at 684x278px; no "Logic ProtoMod" text, no assembly steps,
+F02 next-step kept, predict-then-check and binary-counter content present, panel
+wording present. 16 option rows (4 questions x 4); no explanation visible before
+answering; answering Q1 correctly shows "Correct", reveals only that question's
+explanation, and leaves exactly one mark on screen. E05's manual still renders
+unchanged.
+
+---
+
+### 55. Simple LED (F02) manual, a passive-board slot, and a way to flag unsourced content
+
+**2026-09-01, 02:40 CDT**
+
+**Prompt:** "Now do F02"
+
+**Purpose:** Third in-app manual. F02 turned out to need two pieces of app work
+first, neither of which E05 or F01 had exposed.
+
+**Three questions asked before writing, all answered by the user:**
+- **J1/J40** are 2-pin headers in series with each LED, value "NO", and neither
+  the schematic nor the BOM says whether the board works as shipped. Answer: a
+  jumper is fitted by default, and they exist so current can be measured through
+  an LED by removing it and bridging the pins with an ammeter — "for the more
+  adventurous or curious". Written up as an optional final step, with an explicit
+  "leave these in place" note earlier, since a learner who pulls one without
+  knowing why will assume the board is broken.
+- **F02 has no software controls**, so its slot showed an orange dot and "this
+  ProtoMod isn't supported by this version of the app yet". Answer: add a proper
+  passive-board panel.
+- **Its manual predates the current template** (no creative challenge, no
+  facilitator notes, no difficulty or time). Answer: fill them in and flag them
+  for review.
+
+**Changes — passive boards:**
+- `ViewModels/PassiveModuleViewModel.cs` (new) — for boards with no software
+  controls *by design*. Reports `SlotState.Occupied` (green, like any working
+  module, because that is the truth) and a message pointing at the board's own
+  switches instead of apologising for the app.
+- `ViewModels/ModuleCatalog.cs` — a `Passive` dictionary alongside
+  `Registrations`, with `IsPassive`/`PassiveName`. Passive boards deliberately get
+  no registration: they have no commands, so a `ModulePanelViewModelBase` — which
+  exists to send and parse frames — is the wrong shape entirely.
+- `ViewModels/MainViewModel.cs`, `Views/MainWindow.xaml` — route passive IDs
+  before the unsupported path, plus a `DataTemplate`.
+- Why this is worth a type rather than a reworded string: "passive by design" and
+  "this build hasn't caught up yet" are indistinguishable from `TryCreate`
+  returning null, and they are opposite facts — one is a gap to close, the other
+  is finished. It got worse once manuals landed, since telling a learner the app
+  doesn't support their board directly above that board's manual undermines both.
+
+**Changes — flagging unsourced content:**
+- `Models/Manual/ManualBlocks.cs` — new `CalloutKind.NeedsReview` plus
+  `ManualDocument.NeedsReviewCount` (and `PlaceholderCount` refactored onto a
+  shared counter).
+- `ViewModels/ManualViewModel.cs`, `Views/ManualView.xaml` — a blue in-place
+  callout and a document-level banner counting them.
+- Distinct from `Placeholder` (nothing is there) and `Discrepancy` (contradicts
+  hardware) on purpose. Unsourced content that *looks* finished is the more
+  dangerous of the three, because once rendered it is indistinguishable from
+  sourced content — the only way to catch it is to have it announce itself.
+
+**Changes — the manual:**
+- `Models/Manual/SimpleLedManual.cs` (new), `ManualLibrary.cs` — registered.
+- Technical content verified against the schematic and BOM before use, as with
+  F01: red D1 (LTST-C150KRKT) and green D2 (LTST-C150KGKT), SW1/SW2 selecting
+  3.3 V or 1.8 V, SW3/SW4 selecting 470 or 100 ohms, all matching the source
+  manual's Overview.
+- **Two hardware details the source manual never mentions**, both read off the
+  schematic. TP1-TP4 are real test points positioned so the whole circuit is
+  measurable: TP1 minus TP2 is the voltage across the selected resistor, TP2 to
+  ground is the LED's forward voltage, and the current follows. That is a far
+  better measurement exercise than F01's single reading, and section 3 is built
+  around it — including the point that the LED's own voltage barely moves when
+  the resistor changes, which is the most useful thing this board teaches. And
+  J1/J40 as above.
+- Three `NeedsReview` callouts: header metadata, the creative challenge, the
+  facilitator notes. The prerequisite is *not* flagged — it is sourced, since this
+  manual opens by referring back to F01 and F01's manual names F02 as next.
+- Five multiple-choice questions, all five with answers taken from the source
+  manual's own answer key.
+
+**Verification.** UI Automation, Simulator mode, with `MockSerialService`
+temporarily reporting `BasicLed` in slot 2 (the same technique as entries 24 and
+29), then reverted and the default lineup re-confirmed. Navigator shows "Simple
+LED / Manual available" with no orange "F02" unsupported row; the passive message
+renders and "isn't supported by this version" is gone; header shows Beginner /
+25-35 min / Blinky (F01); the needs-review banner reports exactly 3 and all three
+in-place flags render; five sections plus one appendix; schematic button
+byte-identical (MD5) to `Protomod_simpleLED_Rev01.pdf`; circuit image at
+684x232px; TP and J1 content present; 20 option rows with no explanation visible
+before answering and correct marking after. F01 still renders and correctly shows
+no needs-review banner.

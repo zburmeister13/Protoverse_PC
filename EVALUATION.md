@@ -3,10 +3,12 @@
 **Branch:** `eval/in-app-manuals-e05` · **Demo module:** Electronic Load (E05)
 · **Date:** 2026-08-31
 
-**Recommendation: proceed, with three changes to the plan.** Build a
+**Recommendation: proceed, with four changes to the plan.** Build a
 `.docx` → content converter *before* transcribing any more manuals; treat
-learner-progress persistence as part of v1 rather than a v2 stretch; and
-resolve manual-vs-hardware conflicts before a manual goes in-app, because
+learner-progress persistence as part of v1 rather than a v2 stretch; budget
+per-manual time to write multiple-choice questions, which is the one cost a
+converter can't absorb and the one thing here a PDF genuinely cannot do; and
+resolve content-vs-hardware conflicts before a manual goes in-app, because
 rendering one beside live board state makes it more authoritative than a Word
 file ever was. Detail below.
 
@@ -23,18 +25,23 @@ file ever was. Detail below.
 
 - A content model (`Models/Manual/ManualBlocks.cs`) mapping 1:1 to
   `ProtoVerse_ProtoMod_Manual_Template.docx` — header block, 9 body sections,
-  3 appendices, with callouts, figures, checklists, step lists with inline
-  Observe prompts, fillable value tables, and question lists as first-class
-  block types.
+  3 appendices, with callouts, figures, images, checklists, step lists with
+  inline Observe prompts, fillable value tables, and both free-text and
+  multiple-choice question blocks as first-class block types.
 - One renderer (`Views/ManualView.xaml`) — a set of `DataTemplate`s keyed by
   block type. **Adding a manual adds data, not XAML.** That was the core claim
   to test, and it held.
 - The Electronic Load manual (`Models/Manual/ElectronicLoadManual.cs`) as
-  content — five body sections plus two appendices, written against the real
+  content — five body sections plus one appendix, written against the real
   board's verified behaviour, using `Electronic_Load_E02_Manual.docx` as a
   reference for structure and voice rather than for technical content.
-- Schematic PDFs for all six boards, exported from the KiCad sources and
-  cropped to the drawn circuit, linked from the top of the manual.
+- **Self-marking follow-up questions.** Multiple choice, marked the instant the
+  learner answers, with the reasoning revealed either way. See "what actually
+  differentiates this from a PDF" below — this displaced both the fillable
+  table and the answer-key appendix.
+- Schematic assets for all six boards, exported from the KiCad sources: the
+  full original PDF linked from the top of the manual, and a cropped
+  white-on-black raster of the circuit shown inline in the Overview.
 - A rebuilt Slots tab: a left-hand navigator showing all three physical slots
   with a presence dot, and a workspace per slot with the module's live control
   panel docked above its manual.
@@ -58,7 +65,8 @@ appendix/body split. Each is a handful of lines.
 
 **The app's existing styles stretched without complaint.** Everything is drawn
 with the `App.xaml` brushes and implicit control styles already in the app; no
-new colour, no new control style, no new converter was needed. For a design
+new colour and no new control style was needed. (One new converter, an
+`InverseBoolConverter`, came later with the multiple-choice work.) For a design
 system that grew out of one hardware-control window, that's a better result
 than expected.
 
@@ -97,6 +105,63 @@ the whole question, and it's where I'd change the plan.
 (~2,900 words, 12 sections, 7 tables) into the content model took roughly
 20–30 minutes. That's cheaper than I first guessed, and it revises down an
 earlier estimate in this document's first draft.
+
+**A second data point, added after this document's first draft.** The Blinky
+(F01) manual was then written from E05 as a template, and it confirms the core
+claim: **it needed no XAML and no new block type** — it is one content file plus
+one line in `ManualLibrary`. The renderer really is a fixed cost that is now
+paid.
+
+But it also sharpens where the remaining cost actually sits, and it is not
+transcription. Two things had to be reconciled before a word could be written,
+neither of them visible in the `.docx`:
+
+- **The Gen2 manuals assume the learner writes firmware** ("set LED1's pin
+  HIGH"). No such path exists; the app is the whole interface. Every activity
+  had to be re-expressed against the real panel.
+- **F01's Creative Challenge asks the learner to invent a chase and a
+  scanner — both of which firmware already ships as selectable patterns.**
+  Transcribed faithfully, it would have asked someone to build what a dropdown
+  already does.
+
+Both were settled with the user, along with dropping the manual's references to
+a "Logic ProtoMod" that has no circuit code. **A converter would have produced a
+manual with all three problems intact**, and none of them would have looked like
+a conversion error — which is the strongest argument in this document for the
+validation pass recommended below, and for budgeting editorial time per manual
+rather than treating conversion as the whole job.
+
+**A third manual, F02, changes one estimate materially.** It confirmed the
+renderer again — the content is still pure data — but it needed app work first,
+which F01 and E05 hadn't exposed: a passive-board slot type (F02 has no software
+controls at all) and a way to mark content that has no source document. So the
+"adding a manual is data, not XAML" claim holds for content and does *not* hold
+for a new **kind** of board. Budget for that occasionally, not per manual.
+
+**The bigger finding is about the converter, and it is worth checking before
+committing the day.** The converter estimate above assumes manuals follow
+`ProtoVerse_ProtoMod_Manual_Template.docx`. Counting what actually exists in
+`PROTOVERSE/Manuals/`:
+
+| Format | Module manuals |
+|---|---|
+| Gen2 (follows the template) | 2 — E02/E05 and F01 |
+| Older, pre-template | 4 — A01, E03, F02, and an older F01 |
+
+So **the format the converter would target is currently the minority**. F02's
+older manual has no creative challenge, no facilitator notes, and states no
+difficulty or time — those are template sections that simply do not exist in the
+source, and no converter can produce them. That is not a defect in the older
+manuals; they were written before the template. But it means the realistic
+sequence is **bring the manuals up to the template first, then write the
+converter** — otherwise the converter is being built against documents most of
+which it cannot fully consume.
+
+Two things follow. Where a gap has to be filled anyway, mark it: `NeedsReview`
+callouts render in place and count into a banner, so an estimate can ship as an
+estimate rather than quietly becoming a fact — F02 carries three. And the day
+estimated for the converter should be read as *conditional on the manuals being
+templated*, which is itself unbudgeted work.
 
 **But still: don't hand-transcribe manuals into C#.** Per-manual time isn't
 the argument — drift is. The `.docx` is the authoring surface and always will
@@ -146,6 +211,24 @@ talks to**, in two ways:
 |---|---|---|---|
 | Module code | **E02** throughout | **E05** — EEPROM code, `ProtoModBoardCatalog`, and the folder `PC01_E05_ProtoMod_ElectronicLoad` all agree | **Resolved** — confirmed a typo. The transcription says E05; the `.docx` still says E02 and should be fixed at source, or a converter will reintroduce it. |
 | Circuit | Power MOSFET with op-amp feedback loop, **1 Ω** sense resistor, ProtoCore's **DAC** sets the target and its **ADC reads back live voltage and current** | **Open-loop**: bit-banged PWM into an op-amp, **10 Ω** sense resistor, **no ADC feedback path at all** | **Open** |
+
+**And a third conflict, of a different and more troubling kind.** The first two
+are manual-versus-hardware. This one is **docs-versus-hardware**: `CLAUDE.md`
+and firmware's own source both describe `SetCurrentLimitMa` as rejecting
+anything above `MAX_CURRENT_MA` (300) with `PROTOCOL_ERR_BAD_VALUE`. The real
+board does not. Commanding 400 mA returns a normal `Response` — 400 mA echoed,
+100% duty — reported by the user against the bench board on 2026-08-31.
+
+That matters to this evaluation more than a content bug would, for two reasons.
+First, it was written into the manual *as a teaching point*, complete with a
+question asking why an explicit refusal is safer than a silent clamp. Writing
+in-app content against project documentation rather than against the board is
+the same failure mode as transcribing a manual that describes different
+hardware — it just arrives from a source that felt trustworthy. Second, the
+real behaviour teaches the module's point better: the echo confirms nothing,
+the duty has run out of headroom, and the readout and the circuit have quietly
+stopped agreeing with no way for the board to say so. **Recommendation 5 below
+should be read as covering the app's own docs, not just the Word manuals.**
 
 **How the circuit conflict was resolved:** the Word manuals are reference
 material for the *kind* of content wanted, not sources of truth. So E05's
@@ -241,11 +324,21 @@ not per-manual work.**
   from `Finished Modules`, border and title block intact. This is what the
   manual's schematic button opens: someone opening the full drawing wants the
   full drawing, revision block and all.
-- **`{CODE}_circuit.png`** — a cropped raster of just the circuit, shown
-  inline in the Overview. Made by exporting SVG with kicad-cli's
+- **`{CODE}_circuit.png`** — a cropped **white-on-black** raster of just the
+  circuit, shown inline in the Overview. Made by exporting SVG with kicad-cli's
   exclude-drawing-sheet option, tightening the viewBox to the drawn content,
-  and rasterising with **headless Edge** — there is no SVG rasteriser, PDF
-  tool or Python on this machine, and Edge is on every Windows box.
+  recolouring every stroke and fill white over a black page, and rasterising
+  with **headless Edge** — there is no SVG rasteriser, PDF tool or Python on
+  this machine, and Edge is on every Windows box.
+
+**The monochrome step is not decoration.** KiCad's palette (dark red wires,
+teal pins, green junctions) is meaningful in KiCad and meaningless in a manual,
+and dropping a white-background drawing into a near-black app reads as a lit
+rectangle pasted onto the page. Recolouring is a two-line regex over the SVG
+before rasterising, so it costs nothing per board — worth knowing, because the
+obvious alternative (inverting the finished PNG) would also invert the colours
+into muddy pastels rather than producing clean white lines. The linked PDF
+keeps KiCad's colours: it opens in its own viewer, where they're at home.
 
 Two things that had to be got right, both found by looking at the output
 rather than the numbers:
@@ -278,7 +371,7 @@ convincing, and that contrast is itself the argument for the sequencing rule.
 
 | Risk | Severity | Notes |
 |---|---|---|
-| **Print to PDF** | **Real, for this product** | Word/PDF prints; this doesn't. Classroom worksheets and offline use are a plausible need for an education product, and the fillable value table is exactly the thing a facilitator would want to hand out on paper. No mitigation currently. |
+| **Print to PDF** | **Real, for this product** | Word/PDF prints; this doesn't. Classroom worksheets and offline use are a plausible need for an education product. Note the tension with self-marking questions: the thing that most justifies the in-app format is also the thing that cannot be printed, since a printed multiple-choice question is just a quiz with the answers on another page. |
 | **Text scaling / low-vision** | **Real** | Font sizes are fixed px throughout and don't honour Windows text scaling. Word and tagged PDF have mature accessibility tooling this doesn't match. |
 | Screen-reader access | Low | WPF exposes UI Automation for free — the entire demo was driven and verified through UIA, which is decent evidence the tree is navigable. Not audited against a real screen reader. |
 | Shareable links | None | Nothing is shared today; manuals are local files. |
@@ -289,36 +382,76 @@ convincing, and that contrast is itself the argument for the sequencing rule.
 
 ## Stretch: should the interactive parts be real?
 
-**Revised down, after trying it.** The fillable value table was built and then
-**removed at the user's request** — "not filled out, awkward and useless in
-this case". That is worth taking seriously, because E05 was the strongest
-candidate in the catalog for it: the one board with a dial to turn and a
-number to read back. If the pattern doesn't earn its place there, the case for
-it being *the* differentiator over a PDF is weak.
+**Revised down, then revised back up — but around a different mechanism.**
 
-What seems to have gone wrong is the framing, not the mechanism. A blank
-five-row grid asking a learner to predict duty cycles is homework, and it sat
-in the middle of a section they were reading rather than doing. A worksheet
-wants to be something you open deliberately, not something you scroll past.
+**What didn't work: the fillable value table.** It was built and then **removed
+at the user's request** — "not filled out, awkward and useless in this case".
+That is worth taking seriously, because E05 was the strongest candidate in the
+catalog for it: the one board with a dial to turn and a number to read back. If
+the pattern doesn't earn its place there, the case for it being *the*
+differentiator over a PDF is weak.
+
+What went wrong is the framing, not the mechanism. A blank five-row grid asking
+a learner to predict duty cycles is homework, and it sat in the middle of a
+section they were reading rather than doing. A worksheet wants to be something
+you open deliberately, not something you scroll past.
 
 So: **don't build interactive tables into the manual flow.** If the idea comes
-back, it should be a separate, opt-in surface — and it should be tested on one
-module before being designed for the catalog.
+back, it should be a separate, opt-in surface, tested on one module before
+being designed for the catalog.
 
-The rest of the persistence argument survives intact, and applies to the
-things that *did* stay:
+### What actually differentiates this from a PDF: self-marking questions
+
+The follow-up questions were free text, which is exactly what paper already
+does — and does no worse, since nothing marks either one. Converting them to
+multiple choice changed what the format *is*: the app holds the correct answer,
+so it marks the question the moment it's answered and shows the reasoning
+whether the learner was right or wrong. Paper cannot do that. Neither can a
+PDF.
+
+Three consequences worth carrying into rollout:
+
+1. **It removes the answer-key appendix rather than adding to it.** With the
+   explanation attached to its own question, a key is the same text in a second
+   place — free to drift, and gating answers to questions already answered.
+   E05 went from two appendices to one. Content that marks itself is *less*
+   content, not more.
+2. **The spoiler gate moved down a level and got better.** Instead of one
+   reveal button unlocking every answer at once, each question opens only its
+   own explanation, only after it's been committed to. `IsSpoiler` on a section
+   is still in the model for manuals that need it, but nothing uses it now.
+3. **It is cheap per manual and mechanical to author** — a prompt, four
+   options, an index, an explanation. But it's *not* mechanical to convert:
+   distractors have to be written, and a `.docx` with free-text questions
+   contains no distractors to convert. This is a real cost the converter can't
+   absorb; budget authoring time per manual, or accept free text where nobody
+   writes them.
+
+**A caution the E05 questions illustrate.** A question is only as sound as the
+behaviour it describes. One of these five originally asked why refusing an
+out-of-range command is safer than clamping it — a good question about a thing
+the board does not do (see the hardware conflicts section). Multiple choice
+raises the stakes on that error: free text leaves a learner room to disagree
+with the premise, whereas a marked answer tells them, with the app's authority,
+that the wrong premise is correct.
+
+The persistence argument survives all of this, and applies to the things that
+*did* stay:
 
 **Ticked steps and revealed answers should persist, and I'd still pull that
 into v1.**
 
-The reasoning is a defect this demo already has. The answer fields accept
-input, but nothing is saved — and because `SlotViewModel` rebuilds its
-`ManualViewModel` on every `PresenceReport`, **hot-swapping any module while
-you have work typed in silently discards it.** Firmware sends unsolicited
+The reasoning is a defect this demo already has. Ticked steps and answered
+questions are held in memory only — and because `SlotViewModel` rebuilds its
+`ManualViewModel` on every `PresenceReport`, **hot-swapping any module resets
+every answer the learner has committed to.** Firmware sends unsolicited
 presence reports on hot-swap, so this isn't hypothetical.
 
-An unsaved input field is worse than paper: paper doesn't lose your work when
-someone bumps a board.
+Self-marking questions make this sharper, not milder. A first answer is meant
+to stand — that's what stops the question becoming a lock to pick — so silently
+resetting it hands back the ability to "answer" a question whose explanation
+has already been read. Paper doesn't lose your work when someone bumps a
+board.
 
 **The good news is that it's mostly already done.** `Models/Manual/ManualProgress.cs`
 defines the shape, and every interactive block already carries a stable
@@ -341,21 +474,32 @@ out of the same mechanism for free.
 
 **Proceed, with changes:**
 
-1. **Build the `.docx` → JSON converter first** (~1 day). Do not transcribe
-   manuals by hand; it doesn't scale to the catalog you're targeting and it
-   drifts from the Word source immediately.
-2. **Include progress persistence in v1** (~half a day). The interactive table
-   is the main differentiator over a PDF, and unsaved it's a downgrade.
-3. **Fix the value-table layout properly** (~half a day) before a second
-   table-bearing manual ships.
-4. **Only surface a manual in-app once it's complete *and* agrees with the
+0. **Bring the existing manuals onto the template before anything else.** Only
+   2 of the 6 module manuals follow it today; the other 4 are missing sections
+   the template defines. This wasn't visible until a pre-template manual (F02)
+   was actually built, and it gates the item below.
+1. **Then build the `.docx` → JSON converter** (~1 day, *conditional on the
+   above*). Do not transcribe manuals by hand; it doesn't scale to the catalog
+   you're targeting and it drifts from the Word source immediately.
+2. **Include progress persistence in v1** (~half a day). Self-marking questions
+   are the real differentiator over a PDF, and unsaved they reset on any
+   hot-swap — handing back answers the learner has already seen explained.
+3. **Budget question-authoring time per manual.** Multiple choice is what makes
+   the format worth having, and a Word manual full of free-text questions
+   contains no distractors for a converter to lift. This is the one per-manual
+   cost the converter genuinely cannot absorb.
+4. **Only fix the value-table layout if the table comes back** (~half a day).
+   It was removed from E05; the nested-`UniformGrid` alignment issue below is
+   dormant, not live.
+5. **Only surface a manual in-app once it's complete *and* agrees with the
    hardware.** A half-written manual sends the learner back to Word with two
    conflicting sources; a manual describing the wrong board is worse, because
-   sitting next to live slot state makes it look authoritative.
-5. **Have the converter validate, not just convert** — at minimum, check the
+   sitting next to live slot state makes it look authoritative. Multiple choice
+   raises this stake: a marked answer asserts a premise on the app's authority.
+6. **Have the converter validate, not just convert** — at minimum, check the
    manual's stated module code against `ProtoModBoardCatalog` and refuse to
    emit content for a code no board reports.
-6. **Decide separately about print.** It's the one capability that genuinely
+7. **Decide separately about print.** It's the one capability that genuinely
    goes away, and for a classroom product it may matter more than everything
    above.
 
@@ -369,10 +513,10 @@ workspace needs to handle exercises spanning two ProtoMods.
 
 Driven through UI Automation in Simulator mode. The navigator shows three
 slots with correct presence dots and "Manual available" only on the Electronic
-Load; selecting it renders the header, metadata row, provenance note and TOC;
-typing into a value-table cell and ticking a step both work; "Reveal answers"
-removes the gate and shows the answer key; a slot with no manual shows the
-explanatory placeholder.
+Load; selecting it renders the header, metadata row and TOC; ticking a step
+works; a slot with no manual shows the explanatory placeholder. (Earlier runs
+also verified typing into a value-table cell and the "Reveal answers" spoiler
+gate; both features have since been removed from this manual.)
 
 The six changes requested on 2026-08-31 (evening), each verified:
 
@@ -385,10 +529,22 @@ The six changes requested on 2026-08-31 (evening), each verified:
 | 5 | Drop "Try this" from Library cards | no "TRY THIS" heading and no quoted idea text remains |
 | 6 | Library search by name or code | "load" → E05; "E0" → E03+E05; "zzz" → none, with a no-match message; clear restores all six |
 
-One process note worth recording: an intermediate build failed with a XAML
+The three changes requested later on 2026-08-31, each verified:
+
+| # | Change | Verified |
+|---|---|---|
+| 1 | Multiple choice in section 5 | 20 option rows (4 × 5 questions). No mark and no explanation before answering; answering Q1 wrongly shows "Not quite", reveals that question's explanation only, and leaves the other four hidden; re-clicking the correct option does not change the mark; answering Q4 and Q2 correctly brings the count to 3 marks, 2 correct |
+| 2 | 400 mA behaviour corrected | "rejects it outright" and "produces an explicit error" gone; pegged-duty bullet and overshoot step present; answer-key appendix gone, section list now 5 body + 1 appendix |
+| 3 | Monochrome schematic | regenerated PNG viewed directly — white on black, every designator, value and pin name intact; card behind it black |
+
+Two process notes worth recording. An intermediate build failed with a XAML
 `error MC3000` that a too-narrow grep (`error CS|error MSB`) hid, so one round
 of testing ran against a stale executable. Same failure mode as the stale-lock
 problem noted in `CLAUDE.md` — when scripting a build, match `error` broadly.
+And a UIA assertion briefly appeared to show explanation text leaking before
+the question was answered; it hadn't — the regex was loose enough to also match
+a sentence legitimately on screen elsewhere in the manual. A loose assertion
+fails in the direction of inventing defects, which costs more than it saves.
 
 **Not verified: appearance.** Screenshot capture returns a blank client area
 for this app in this environment (documented in `CLAUDE.md`), so the layout

@@ -8,6 +8,7 @@
         <conv:SlotStateToBrushConverter x:Key="SlotStateToBrushConverter"/>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+        <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
         <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
 
         <!--

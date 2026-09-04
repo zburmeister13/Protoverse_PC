@@ -13,8 +13,17 @@
 #
 # The PNG is made by exporting SVG with kicad-cli's exclude-drawing-sheet
 # option (no border, no title block), tightening its viewBox to the drawn
-# content, and rasterising with headless Edge - there is no SVG rasteriser or
-# PDF tool on this machine (no Inkscape, Ghostscript, ImageMagick or Python).
+# content, recolouring it white-on-black, and rasterising with headless Edge -
+# there is no SVG rasteriser or PDF tool on this machine (no Inkscape,
+# Ghostscript, ImageMagick or Python).
+#
+# WHITE ON BLACK, NOT KICAD'S COLOURS. KiCad draws schematics in its own
+# palette (dark red wires, teal pins, green junctions) on white. Dropped into
+# this app's near-black theme that reads as a bright rectangle pasted onto the
+# page, and the palette carries no meaning a learner needs. Every stroke and
+# fill is recoloured to white over a black page instead, so the figure belongs
+# to the manual around it. The linked PDF is untouched and still in full
+# colour - that is the reference drawing, and it opens in its own viewer.
 #
 # THE BOUNDS MUST INCLUDE TEXT. An earlier version measured only <path> and
 # <circle> geometry and clipped reference designators, pin names and component
@@ -32,7 +41,10 @@ param(
     [string]$KiCadCli   = "E:\KiCad 9.0\bin\kicad-cli.exe",
     [string]$Edge       = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     [double]$MarginMm   = 4.0,
-    [double]$PxPerMm    = 4.0
+    # Rasterised well above display size: the manual shows the PNG at ~290px
+    # tall, and rendering at 8 px/mm then letting WPF scale down keeps hairline
+    # wires and 1mm text legible instead of aliasing them away.
+    [double]$PxPerMm    = 8.0
 )
 
 # NB: none of these may be named $sources / $outDir etc. differing only by case
@@ -138,6 +150,18 @@ foreach ($code in $boards.Keys | Sort-Object) {
         'width="[^"]*"\s+height="[^"]*"\s+viewBox="[^"]*"',
         ('width="{0}px" height="{1}px" viewBox="{2:F3} {3:F3} {4:F3} {5:F3}"' -f $pxW, $pxH, $minX, $minY, $w, $h),
         [System.Text.RegularExpressions.RegexOptions]::Singleline)
+
+    # Recolour to white-on-black. Every stroke:#RRGGBB and fill:#RRGGBB becomes
+    # white; "none" values are left alone, so unfilled symbol bodies stay
+    # unfilled rather than turning into white blobs.
+    $cropped = [regex]::Replace($cropped, '(stroke|fill):\s*#[0-9A-Fa-f]{6}', '$1:#FFFFFF')
+
+    # A black page under it. Edge screenshots whatever the page background is,
+    # which defaults to white, so the black has to be drawn rather than styled -
+    # a rect covering exactly the cropped viewBox, inserted as the first thing
+    # in the document so everything else paints over it.
+    $bg = ('<rect x="{0:F3}" y="{1:F3}" width="{2:F3}" height="{3:F3}" style="fill:#000000; stroke:none;" />' -f $minX, $minY, $w, $h)
+    $cropped = [regex]::Replace($cropped, '(viewBox="[^"]*"\s*>)', ('$1' + $bg))
 
     $cropSvg = Join-Path $work "$code`_crop.svg"
     Set-Content -Path $cropSvg -Value $cropped -Encoding UTF8

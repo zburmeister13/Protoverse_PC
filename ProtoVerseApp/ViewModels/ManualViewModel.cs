@@ -54,6 +54,111 @@ namespace ProtoVerseApp.ViewModels
         }
     }
 
+    /// <summary>How one multiple-choice option should read once the question has been
+    /// answered. Deliberately one enum rather than three bools, so the XAML can pick a
+    /// treatment with a single DataTrigger instead of a stack of MultiDataTriggers.</summary>
+    public enum ChoiceState
+    {
+        /// <summary>Unanswered, or answered and this option was neither picked nor
+        /// correct.</summary>
+        Idle,
+
+        /// <summary>The correct answer, once revealed.</summary>
+        Right,
+
+        /// <summary>What the learner picked, when it wasn't the correct answer.</summary>
+        Wrong
+    }
+
+    /// <summary>One selectable answer. Holds its own command so the XAML binds
+    /// <c>Command="{Binding SelectCommand}"</c> with no RelativeSource walk back up to
+    /// the question.</summary>
+    public partial class ChoiceOptionViewModel : ObservableObject
+    {
+        private readonly ChoiceQuestionViewModel _question;
+
+        public string Text { get; }
+        public string Letter { get; }
+        public bool IsCorrect { get; }
+
+        [ObservableProperty]
+        private ChoiceState _state = ChoiceState.Idle;
+
+        public ChoiceOptionViewModel(ChoiceQuestionViewModel question, string text, string letter, bool isCorrect)
+        {
+            _question = question;
+            Text = text;
+            Letter = letter;
+            IsCorrect = isCorrect;
+        }
+
+        [RelayCommand]
+        private void Select() => _question.Answer(this);
+    }
+
+    /// <summary>One multiple-choice question and its marking state.</summary>
+    public partial class ChoiceQuestionViewModel : ObservableObject
+    {
+        public string Key { get; }
+        public string Text { get; }
+        public string Explanation { get; }
+        public IReadOnlyList<ChoiceOptionViewModel> Options { get; }
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ResultText))]
+        private bool _isAnswered;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ResultText))]
+        private bool _answeredCorrectly;
+
+        public string ResultText => !IsAnswered
+            ? ""
+            : AnsweredCorrectly ? "Correct" : "Not quite";
+
+        public ChoiceQuestionViewModel(string key, ManualChoiceQuestion question)
+        {
+            Key = key;
+            Text = question.Text;
+            Explanation = question.Explanation;
+
+            var options = new List<ChoiceOptionViewModel>();
+            for (int i = 0; i < question.Options.Count; i++)
+            {
+                options.Add(new ChoiceOptionViewModel(
+                    this,
+                    question.Options[i],
+                    // A, B, C... - a label to refer to out loud, which matters when
+                    // someone is being helped through a module by a person beside them.
+                    ((char)('A' + i)).ToString(),
+                    isCorrect: i == question.CorrectIndex));
+            }
+
+            Options = options;
+        }
+
+        /// <summary>Marks the question. First answer stands: the point is to find out
+        /// what the learner thought, and letting them click on until it goes green
+        /// would turn the question into a lock to pick.</summary>
+        public void Answer(ChoiceOptionViewModel chosen)
+        {
+            if (IsAnswered)
+                return;
+
+            IsAnswered = true;
+            AnsweredCorrectly = chosen.IsCorrect;
+
+            foreach (var option in Options)
+            {
+                // The correct answer always shows, right or wrong. A learner who
+                // guessed wrong needs to see which one it was, next to why.
+                option.State = option.IsCorrect ? ChoiceState.Right
+                    : option == chosen ? ChoiceState.Wrong
+                    : ChoiceState.Idle;
+            }
+        }
+    }
+
     /// <summary>A checkable item in a "You'll need" list or a step list.</summary>
     public partial class CheckableItemViewModel : ObservableObject
     {
@@ -182,6 +287,12 @@ namespace ProtoVerseApp.ViewModels
         public string PlaceholderWarning =>
             $"{Document.PlaceholderCount} section(s) of this manual haven't been written yet and show as placeholders.";
 
+        public bool HasNeedsReview => Document.NeedsReviewCount > 0;
+
+        public string NeedsReviewWarning =>
+            $"{Document.NeedsReviewCount} passage(s) below were written for the app and aren't in this module's source manual. " +
+            "They're marked in place and need review before this ships.";
+
         /// <summary>Set by the TOC; the view scrolls to it. Not a filter - the manual
         /// stays one continuous scroll, since a learner mid-task flips back and forth
         /// between setup and observations.</summary>
@@ -243,6 +354,13 @@ namespace ProtoVerseApp.ViewModels
                         result.Add(new QuestionListViewModel(
                             questions.Questions.Select((text, index) =>
                                 new QuestionViewModel($"{questions.Id}/{index}", text)).ToList()));
+                        break;
+
+                    case MultipleChoiceBlock choices:
+                        result.Add(new MultipleChoiceViewModel(
+                            choices.Heading,
+                            choices.Questions.Select((question, index) =>
+                                new ChoiceQuestionViewModel($"{choices.Id}/{index}", question)).ToList()));
                         break;
 
                     default:
@@ -308,5 +426,18 @@ namespace ProtoVerseApp.ViewModels
     {
         public IReadOnlyList<QuestionViewModel> Questions { get; }
         public QuestionListViewModel(IReadOnlyList<QuestionViewModel> questions) => Questions = questions;
+    }
+
+    public class MultipleChoiceViewModel
+    {
+        public string? Heading { get; }
+        public IReadOnlyList<ChoiceQuestionViewModel> Questions { get; }
+        public bool HasHeading => Heading != null;
+
+        public MultipleChoiceViewModel(string? heading, IReadOnlyList<ChoiceQuestionViewModel> questions)
+        {
+            Heading = heading;
+            Questions = questions;
+        }
     }
 }

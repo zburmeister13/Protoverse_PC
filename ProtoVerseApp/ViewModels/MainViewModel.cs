@@ -302,6 +302,16 @@ namespace ProtoVerseApp.ViewModels
         /// identity".</summary>
         private static SlotViewModel BuildUnsupportedSlot(int slot, ProtoModId moduleId)
         {
+            // A board that is passive by design isn't unsupported - there is nothing to
+            // support. Checked before the unsupported path so it never renders with an
+            // orange dot and an apology, which would be wrong on both counts.
+            var passiveName = ModuleCatalog.PassiveName(moduleId);
+            if (passiveName != null)
+            {
+                return new SlotViewModel(slot, new PassiveModuleViewModel(moduleId, passiveName),
+                    moduleId, SlotState.Occupied, passiveName);
+            }
+
             var circuitCode = ProtoModBoardCatalog.Entries.FirstOrDefault(e => e.Id == moduleId)?.CircuitCode;
             var label = moduleId == ProtoModId.Unknown
                 ? "Unrecognized board"

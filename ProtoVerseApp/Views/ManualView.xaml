@@ -92,6 +92,14 @@
                 </DataTrigger>
                 <!-- Placeholder callouts are meant to look unfinished. A half-written
                      manual must never be mistakable for a finished one. -->
+                <!-- Written for the app, no source document, not signed off. Blue rather
+                     than orange: it is a note to whoever maintains the content, not a
+                     warning that anything is wrong or missing. -->
+                <DataTrigger Binding="{Binding Kind}" Value="NeedsReview">
+                    <Setter TargetName="callout" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                    <Setter TargetName="callout" Property="BorderThickness" Value="1"/>
+                    <Setter TargetName="calloutTitle" Property="Foreground" Value="{StaticResource AccentBlueBrush}"/>
+                </DataTrigger>
                 <DataTrigger Binding="{Binding Kind}" Value="Placeholder">
                     <Setter TargetName="callout" Property="BorderBrush" Value="{StaticResource AccentOrangeBrush}"/>
                     <Setter TargetName="callout" Property="BorderThickness" Value="1"/>
@@ -124,10 +132,13 @@
             </Border>
         </DataTemplate>
 
-        <!-- A real image. Schematics are drawn dark-on-white, so it sits on a light
-             card rather than being forced into the dark theme - inverting a schematic
-             makes it harder to read, not more consistent. Clicking opens the full
-             PDF, same as the button at the top. -->
+        <!-- A real image. The schematic raster is built white-on-black by
+             tools/build_schematics.ps1, so the card under it is black rather than
+             white: the figure then reads as part of the page instead of a lit
+             rectangle pasted onto it. Pure black, not a theme surface brush, so the
+             PNG's own background disappears into the card with no visible seam where
+             the image ends. Clicking opens the full colour PDF, same as the button at
+             the top. -->
         <DataTemplate DataType="{x:Type mdl:ImageBlock}">
             <StackPanel Margin="0,4,0,14"
                         Visibility="{Binding Exists, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -136,7 +147,7 @@
                         ToolTip="Open the full schematic PDF">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="frame" Background="White" CornerRadius="6" Padding="10"
+                            <Border x:Name="frame" Background="Black" CornerRadius="6" Padding="10"
                                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                                 <ContentPresenter/>
                             </Border>
@@ -284,6 +295,108 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+        </DataTemplate>
+
+        <!-- Multiple-choice follow-up questions. The app knows the answer, so it marks
+             the moment the learner chooses and shows the reasoning either way - which
+             is the one thing this can do that a printed manual cannot, and why there is
+             no separate answer-key appendix to drift out of step with it. -->
+        <DataTemplate DataType="{x:Type vm:MultipleChoiceViewModel}">
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Visibility="{Binding HasHeading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <ItemsControl ItemsSource="{Binding Questions}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,0,18">
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,0,7"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+
+                                <ItemsControl ItemsSource="{Binding Options}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <!-- Once answered the row stops responding
+                                                 rather than being disabled: a greyed-out
+                                                 answer is harder to read, and reading it
+                                                 is exactly what the learner should do
+                                                 next. -->
+                                            <Button Command="{Binding SelectCommand}" Margin="0,0,0,4"
+                                                    HorizontalContentAlignment="Stretch" Cursor="Hand"
+                                                    IsHitTestVisible="{Binding DataContext.IsAnswered,
+                                                        RelativeSource={RelativeSource AncestorType=ItemsControl},
+                                                        Converter={StaticResource InverseBoolConverter}}">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="row" CornerRadius="4" Padding="9,7"
+                                                                Background="{StaticResource BgBrush}"
+                                                                BorderBrush="{StaticResource BorderBrush}"
+                                                                BorderThickness="1">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock x:Name="letter" Grid.Column="0"
+                                                                           Text="{Binding Letter}" FontWeight="Bold"
+                                                                           FontSize="11" Margin="0,1,9,0"
+                                                                           VerticalAlignment="Top"
+                                                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                                <TextBlock x:Name="body" Grid.Column="1"
+                                                                           Text="{Binding Text}" TextWrapping="Wrap"
+                                                                           FontSize="12"
+                                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                            </Grid>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource AccentTealBrush}"/>
+                                                            </Trigger>
+                                                            <DataTrigger Binding="{Binding State}" Value="Right">
+                                                                <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+                                                                <Setter TargetName="row" Property="BorderThickness" Value="2"/>
+                                                                <Setter TargetName="letter" Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding State}" Value="Wrong">
+                                                                <Setter TargetName="row" Property="BorderBrush" Value="{StaticResource AccentOrangeBrush}"/>
+                                                                <Setter TargetName="row" Property="BorderThickness" Value="2"/>
+                                                                <Setter TargetName="letter" Property="Foreground" Value="{StaticResource AccentOrangeBrush}"/>
+                                                                <Setter TargetName="body" Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                                                            </DataTrigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Button.Template>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Shown right or wrong. Being told you are wrong
+                                     without being told why is the least useful feedback
+                                     available. -->
+                                <Border x:Name="feedback" Margin="0,5,0,0" Padding="10,8" CornerRadius="4"
+                                        Background="{StaticResource SurfaceAltBrush}"
+                                        BorderBrush="{StaticResource AccentGreenBrush}" BorderThickness="3,0,0,0"
+                                        Visibility="{Binding IsAnswered, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <StackPanel>
+                                        <TextBlock x:Name="result" Text="{Binding ResultText}" FontSize="10"
+                                                   FontWeight="Bold" Margin="0,0,0,4"
+                                                   Foreground="{StaticResource AccentGreenBrush}"/>
+                                        <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" FontSize="12"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding AnsweredCorrectly}" Value="False">
+                                    <Setter TargetName="feedback" Property="BorderBrush" Value="{StaticResource AccentOrangeBrush}"/>
+                                    <Setter TargetName="result" Property="Foreground" Value="{StaticResource AccentOrangeBrush}"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
         </DataTemplate>
 
         <!-- ============================== a section ============================== -->
@@ -456,6 +569,18 @@
                     <TextBlock Text="{Binding PlaceholderWarning}" TextWrapping="Wrap" FontSize="11"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource AccentOrangeBrush}"/>
+                </Border>
+                <!-- Unsourced-content notice. Separate from the placeholder banner
+                     because they mean different things: that one says content is
+                     missing, this one says content is present but nobody has signed
+                     off on it - which is the more dangerous of the two, since it
+                     looks finished. -->
+                <Border Margin="0,0,0,18" Padding="10,8" CornerRadius="4"
+                        Background="{StaticResource BgBrush}"
+                        BorderBrush="{StaticResource AccentBlueBrush}" BorderThickness="1"
+                        Visibility="{Binding HasNeedsReview, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="{Binding NeedsReviewWarning}" TextWrapping="Wrap" FontSize="11"
+                               Foreground="{StaticResource AccentBlueBrush}"/>
                 </Border>
                 <Border Height="14" Background="Transparent"
                         Visibility="{Binding HasPlaceholders, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>

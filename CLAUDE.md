@@ -341,8 +341,23 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   op-amp forcing current through a 10-ohm sense resistor, no ADC feedback
   path), so there is no measured voltage/current to ever report. Command:
   `SetCurrentLimitMa` = `payload[0]=0x01`, `payload[1..2]` = uint16 LE mA,
-  0-300 (`MAX_CURRENT_MA`; out of range → `PROTOCOL_ERR_BAD_VALUE`, wrong
-  length → `PROTOCOL_ERR_BAD_PAYLOAD_LEN`, same pattern as BlinkyLed).
+  0-300 (`MAX_CURRENT_MA`; wrong length → `PROTOCOL_ERR_BAD_PAYLOAD_LEN`,
+  same pattern as BlinkyLed).
+  **The documented out-of-range rejection does not happen on real hardware
+  (found 2026-08-31).** Both this file and firmware's own source described
+  anything above `MAX_CURRENT_MA` coming back as `PROTOCOL_ERR_BAD_VALUE`.
+  The user commanded 400mA against the bench board and got a normal
+  `Response`: 400mA echoed, `duty_percent` 100. So either the range check
+  isn't reached or `MAX_CURRENT_MA` isn't enforced on the path that runs -
+  unresolved firmware-side, and worth raising with that session. Nothing in
+  this app clamps either (`ElectronicLoadViewModel.ApplyCurrentLimit` casts
+  straight to `ushort`), which is the right default: the app shouldn't
+  invent a limit the board doesn't enforce, and the failure is instructive
+  rather than dangerous — duty saturates at 100% and the echoed current
+  keeps climbing, so the readout and the circuit silently stop agreeing.
+  E05's in-app manual now teaches exactly that (CHANGELOG entry 52). If a
+  firmware fix ever lands that does reject >300mA, that manual content has
+  to change with it — it is written against the current behaviour.
   Response is a 3-byte `[current_ma_lo, current_ma_hi, duty_percent]` — an
   echo of the commanded current (not a measurement) plus the PWM duty cycle
   firmware is actually driving. `ElectronicLoadViewModel` was originally
@@ -431,6 +446,22 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   a type is genuinely uncataloged on this side too. If asked to add a new
   ProtoMod, the only new-module-specific code goes in `ModuleCatalog` plus
   the panel itself — `MainViewModel` and the XAML shouldn't need to change.
+- **A board that is passive by design is not "unsupported" — keep the two
+  apart** (added 2026-09-01). Some ProtoMods have no software controls at all:
+  every input is a switch or jumper on the board, so there is nothing for
+  ProtoCore to command and never will be. Simple LED (`BasicLed`/F02) is the
+  first. These are listed in `ModuleCatalog.Passive` and render as
+  `PassiveModuleViewModel` — a green `SlotState.Occupied` dot and a message
+  pointing at the board's own switches — rather than falling through to
+  `UnknownModuleViewModel`'s orange dot and "isn't supported by this version
+  of the app yet". They deliberately get no `ModuleCatalog` registration:
+  they have no commands, so a `ModulePanelViewModelBase` (which exists to
+  send and parse frames) is the wrong shape. The distinction matters because
+  both cases look identical from `TryCreate` returning null while being
+  opposite facts — one is a gap to close, the other is finished — and it got
+  worse once manuals landed, since telling a learner the app doesn't support
+  their board directly above that board's manual is a bad first impression of
+  both. Add a passive board to that dictionary, not to `Registrations`.
 - **Simulator mode** exists for developing/testing without hardware. `FrameDispatcher`
   talks to an `ISerialService` interface rather than `SerialService` directly, so it
   can point at either the real port or `MockSerialService` (swapped at runtime via
@@ -535,6 +566,77 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   rule. Should eventually move to a JSON/manifest source shared with the
   manual docs — the records are already flat and JSON-friendly, and
   `Entries` is the only thing the rest of the app reads.
+- **In-app manuals: E05 is the template, and difficulty is pitched per
+  family.** Two standing directions from the user (2026-08-31), which apply to
+  every ProtoMod lab written from here on. They live in this file rather than
+  only in the eval branch because they outlive it — they are content policy,
+  not a property of the current prototype.
+  **Three manuals exist** (`ManualLibrary` registers them): E05, built first
+  to prove the renderer, then F01 Blinky and F02 Simple LED written from E05
+  as a template. E05 is a mid-series Explorers board and the two F boards are
+  first-touch Fundamentals ones, so between them they show both ends of the
+  difficulty range. F01 is the worked example of rule 2 below; read it before
+  writing another F-series manual.
+  **F02 is the awkward case and the most useful one to read before manual
+  four**, for two reasons that will both recur. It's the first manual for a
+  board with **no software controls at all** (see the passive-board note
+  earlier in this section), so the panel above it isn't part of the exercise.
+  And it's the first assembled from a **pre-template source document** — the
+  older `.docx` format with no creative challenge, no facilitator notes and no
+  stated difficulty or time. Most of the catalog's manuals are in that older
+  format, so expect this again. The user's call (2026-09-01) was to fill those
+  gaps in and flag them rather than leave them empty, which is what
+  `CalloutKind.NeedsReview` is for: it marks a passage that was written for
+  the app with no source document behind it, renders in blue as a note to
+  whoever maintains the content, and is counted into a banner at the top of
+  the manual (`ManualDocument.NeedsReviewCount`). It is deliberately distinct
+  from `Placeholder` (nothing is there) and `Discrepancy` (contradicts the
+  hardware) — unsourced content that *looks* finished is the more dangerous
+  case, and the only way to catch it is to have it say so itself. Use it for
+  anything a source document doesn't back; don't quietly promote an estimate
+  to a fact.
+  **1. Use `Models/Manual/ElectronicLoadManual.cs` (E05) as the general
+  template**, adjusting where a board needs it, rather than starting from the
+  Word template's twelve sections. What E05 settled and a new manual should
+  inherit: five body sections plus one appendix (Overview, How it works, Set
+  up and try it, What you should see, Go further, then facilitator notes) —
+  fewer, better-grouped headings are easier on the eye than the full template;
+  the circuit image inline in the Overview with the full PDF linked at the
+  top; steps carrying inline `Observe` prompts rather than a separate
+  observations section; self-marking multiple-choice follow-up questions
+  instead of free text, and therefore no answer-key appendix; and no assembly
+  steps, since an in-app manual is only reachable once the board is already
+  seated and enumerated. Adjust where a board genuinely differs — E05 has no
+  chart because the hardware can't measure anything, which is not a template
+  rule.
+  **2. Fundamentals (F) manuals must assume much, much less prior knowledge
+  than E05 does.** E05 is a mid-series Explorers board and is written for
+  someone who already accepts Ohm's law, reads a schematic, and owns a
+  multimeter. An F-series manual cannot assume any of that. Its primary job is
+  to *build* that understanding and then tie it to something the learner
+  watches the hardware do — concept first, in plain language, then an
+  observation on the real board that makes the concept concrete. Prefer more,
+  smaller steps with an `Observe` on each; explain a term the first time it
+  appears rather than relying on the reader having met it; and treat "the
+  learner has never used a multimeter" as the default rather than an edge
+  case. The pitch difference between families is deliberate and follows the
+  F/E/A families documented in the Library section above — don't level a
+  Fundamentals manual up to match E05's voice for consistency's sake.
+  **3. Expect the Word manual's activities to need rewriting, and check its
+  Creative Challenge against firmware before quoting it.** Both found writing
+  F01. The Gen2 manuals are written as though the learner programs the GPIO
+  pins ("set LED1's pin HIGH"), and no such path exists today — the app is the
+  whole interface, so activities have to be re-expressed against the real
+  panel (clicking an LED indicator *is* driving that pin HIGH, and the manual
+  should say so outright, or the concept doesn't land). Worse, F01's Creative
+  Challenge asks the learner to invent a chase and a scanner — both of which
+  firmware already ships as selectable patterns, so quoting it unchanged would
+  ask someone to build what a dropdown already does. It became
+  predict-then-check against the built-in patterns, keeping the 4-bit binary
+  counter as the hands-on build because firmware genuinely doesn't do that
+  one. Neither problem is visible from the `.docx` alone, so check both per
+  manual — and settle the adaptation with the user rather than picking one, as
+  all three of F01's were.
 - **Help tab** — lives in the same collapsed-by-default bottom `Expander` as the
   Traffic Log (they're now two `TabItem`s of one `TabControl` there, not two
   separate Expanders). `HelpViewModel.RevisionNotes` is a hand-maintained,

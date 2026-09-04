@@ -46,6 +46,14 @@ namespace ProtoVerseApp.Models.Manual
         /// <see cref="ManualDocument.PlaceholderCount"/>.</summary>
         Placeholder,
 
+        /// <summary>Marks content that was written for the app and has no source
+        /// document behind it, and so has not been signed off. Distinct from
+        /// <see cref="Placeholder"/>, which means nothing is there at all: this is real,
+        /// finished-looking content, which is exactly why it needs to announce itself -
+        /// an unreviewed paragraph is indistinguishable from a sourced one once it is
+        /// rendered. Counted by <see cref="ManualDocument.NeedsReviewCount"/>.</summary>
+        NeedsReview,
+
         /// <summary>Marks a place where the manual and the hardware (or this app)
         /// disagree. Not authored content - an app-side note, always attributed as
         /// such. Exists because silently rendering a manual that describes a different
@@ -106,8 +114,38 @@ namespace ProtoVerseApp.Models.Manual
 
     /// <summary>Follow-up &amp; reflection questions. Rendered with a free-text answer
     /// field per question; <paramref name="Id"/> keys those answers for persistence.
-    /// Answers never appear here - they live in Appendix A, which is gated.</summary>
+    /// Answers never appear here - they live in a gated answer-key appendix.
+    ///
+    /// Kept for manuals whose questions genuinely have no checkable answer. Where an
+    /// answer can be checked, prefer <see cref="MultipleChoiceBlock"/>: free text puts
+    /// the burden of marking on the learner, who is the person least able to do
+    /// it.</summary>
     public record QuestionsBlock(string Id, IReadOnlyList<string> Questions) : ManualBlock;
+
+    /// <summary>One multiple-choice question. <paramref name="CorrectIndex"/> indexes
+    /// <paramref name="Options"/>; <paramref name="Explanation"/> is shown once the
+    /// learner has answered, whether they got it right or not - being told you are
+    /// wrong without being told why is the least useful possible feedback.</summary>
+    public record ManualChoiceQuestion(
+        string Text,
+        IReadOnlyList<string> Options,
+        int CorrectIndex,
+        string Explanation);
+
+    /// <summary>Checkable follow-up questions.
+    ///
+    /// This is the block that makes an in-app manual do something a printed one can't:
+    /// the answer is known to the app, so the learner gets it marked the instant they
+    /// choose, with the reasoning attached. That also removes the need for a separate
+    /// answer-key appendix - one place for an answer instead of two that can drift
+    /// apart.
+    ///
+    /// <paramref name="Id"/> keys each answer for persistence (see
+    /// <see cref="ManualProgress"/>).</summary>
+    public record MultipleChoiceBlock(
+        string Id,
+        IReadOnlyList<ManualChoiceQuestion> Questions,
+        string? Heading = null) : ManualBlock;
 
     /// <summary>
     /// One numbered section of the manual.
@@ -159,17 +197,23 @@ namespace ProtoVerseApp.Models.Manual
         /// <summary>How many placeholder callouts this manual contains - i.e. how much
         /// of it is scaffolding rather than written content. Surfaced in the UI so a
         /// half-written manual is never mistaken for a finished one.</summary>
-        public int PlaceholderCount
+        public int PlaceholderCount => CountCallouts(CalloutKind.Placeholder);
+
+        /// <summary>How many passages this manual contains that were written for the app
+        /// with no source document behind them and have not been signed off. Surfaced in
+        /// the UI for the same reason as <see cref="PlaceholderCount"/>: unsourced
+        /// content that looks finished is the failure this project's no-fabrication rule
+        /// exists to prevent, and it can only be caught if it says so itself.</summary>
+        public int NeedsReviewCount => CountCallouts(CalloutKind.NeedsReview);
+
+        private int CountCallouts(CalloutKind kind)
         {
-            get
-            {
-                int count = 0;
-                foreach (var section in Sections)
-                    foreach (var block in section.Blocks)
-                        if (block is CalloutBlock { Kind: CalloutKind.Placeholder })
-                            count++;
-                return count;
-            }
+            int count = 0;
+            foreach (var section in Sections)
+                foreach (var block in section.Blocks)
+                    if (block is CalloutBlock callout && callout.Kind == kind)
+                        count++;
+            return count;
         }
     }
 }

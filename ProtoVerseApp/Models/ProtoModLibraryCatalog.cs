@@ -106,7 +106,7 @@ namespace ProtoVerseApp.Models
     /// the manual first, then quote it.
     ///
     /// Sources used, all verified by reading the files directly:
-    ///   - `PROTOVERSE/Manuals/Gen2/Blinky_F01_Manual.docx`  (F01, newest manual)
+    ///   - `PROTOVERSE/Manuals/Gen2/F01_Blinky_Manual.docx`  (F01, newest manual)
     ///   - `PROTOVERSE/Manuals/F02_Simple_LED.docx`          (F02)
     ///   - `PROTOVERSE/Manuals/E03_Sensors1.docx`            (E03)
     ///   - `PROTOVERSE/Manuals/A01_DDS.docx`                 (A01)
@@ -120,7 +120,7 @@ namespace ProtoVerseApp.Models
             // ---------------------------------------------------------------- F01
             // Two manuals exist for this board: `Manuals/F01_Blinky.docx` (older -
             // titles the board "Blink", calls the series "Foundations", and points at
-            // F02 as "the Switch ProtoMod") and `Manuals/Gen2/Blinky_F01_Manual.docx`
+            // F02 as "the Switch ProtoMod") and `Manuals/Gen2/F01_Blinky_Manual.docx`
             // (newer, written against the ProtoVerse_ProtoMod_Manual_Template - titles
             // it "Blinky", says "Fundamentals Series", and describes F02 as "Simple
             // LED", matching F02's own manual). Everything below is quoted from the
@@ -158,7 +158,7 @@ namespace ProtoVerseApp.Models
                         "“Once you're comfortable driving LEDs directly with GPIO, move on to Simple LED (F02)” - Blinky (F01) manual, §8 Future ProtoMods for you"),
                 },
                 ProtocolId: ProtoModId.BlinkyLed,
-                ManualReference: "PROTOVERSE/Manuals/Gen2/Blinky_F01_Manual.docx"),
+                ManualReference: "PROTOVERSE/Manuals/Gen2/F01_Blinky_Manual.docx"),
 
             // ---------------------------------------------------------------- F02
             // This manual has no Creative Challenge section (only the Gen2 template

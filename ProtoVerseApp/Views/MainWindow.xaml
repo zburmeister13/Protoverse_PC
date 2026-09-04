@@ -37,6 +37,12 @@
             <TextBlock Text="This ProtoMod isn't supported by this version of the app yet."
                        FontStyle="Italic" Foreground="{StaticResource TextSecondaryBrush}"/>
         </DataTemplate>
+        <!-- A board with no software controls by design. Not styled as a warning: it
+             isn't one, and the slot dot is green like any working module. -->
+        <DataTemplate DataType="{x:Type vm:PassiveModuleViewModel}">
+            <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+        </DataTemplate>
     </Window.Resources>
 
     <Window.DataContext>
