@@ -64,8 +64,7 @@ namespace ProtoVerseApp.Models.Registry
                     null, null, null);
             }
 
-            var (scheme, manual) = ResolveControlSchemeAndManual(entry);
-            return new RegistryLookupResult(RegistryLookupKind.Found, entry, scheme, manual);
+            return new RegistryLookupResult(RegistryLookupKind.Found, entry, ResolveControlScheme(entry), entry.ManualReference);
         }
 
         /// <summary>Follows <see cref="ProtoModRegistryEntry.CompatibleWithRevision"/>
@@ -73,8 +72,14 @@ namespace ProtoVerseApp.Models.Registry
         /// assuming an unbroken chain - <see cref="ProtoModRegistryValidator"/>
         /// guarantees each single hop resolves to a real entry, but guards against a
         /// cycle here anyway rather than trusting that guarantee all the way down a
-        /// chain a future registry might grow.</summary>
-        private (string ControlScheme, string? ManualReference) ResolveControlSchemeAndManual(ProtoModRegistryEntry entry)
+        /// chain a future registry might grow.
+        ///
+        /// Deliberately resolves *only* the control scheme, not the manual reference:
+        /// an override declares "this revision's controls behave like that one's," not
+        /// "this revision's physical assembly steps are identical" - see the doc
+        /// comment on <see cref="ProtoModRegistryEntry.ManualReference"/>. Each entry
+        /// keeps its own manual regardless of any override.</summary>
+        private string ResolveControlScheme(ProtoModRegistryEntry entry)
         {
             var current = entry;
             var visited = new HashSet<string> { current.Revision };
@@ -90,16 +95,7 @@ namespace ProtoVerseApp.Models.Registry
                 current = target;
             }
 
-            // Manual reference intentionally comes from the *resolved* entry, same as
-            // control scheme: a compatibility override means "use that revision's
-            // control scheme," and a revision that shares a control scheme with an
-            // earlier one very plausibly shares its assembly/setup steps too. A
-            // registry entry can still override just the manual by using its own
-            // ManualReference while leaving CompatibleWithRevision unset for control
-            // scheme purposes - but that would mean it isn't actually declaring
-            // compatibility, it would need its own ControlScheme, which is exactly the
-            // "own separate identity" default this registry uses absent an override.
-            return (current.ControlScheme, current.ManualReference);
+            return current.ControlScheme;
         }
     }
 }
