@@ -2963,3 +2963,169 @@ it would simply have shipped as a bomb graphic on GitHub.
 
 **Also:** `CLAUDE.md` gains the working capture recipe, the Mermaid-verification
 technique and the semicolon trap.
+
+### 57. Connection toolbar folded into the header; Connect/Disconnect/Refresh merged into one button
+**2026-09-07**
+
+**Prompt:** "I want the whole row of buttons including the simulator check, com
+port dropdown, refresh/connect/disconnect/identify buttons to be between the
+ProtoVerse logo and the sign in section... to maximize the screen allocated to
+a manual and mods control panels" followed by "I think the logic of refresh
+connect and disconnect can all be merged into a single button" and, when asked
+whether the port list should auto-refresh on dropdown-open instead of keeping a
+manual Refresh button, "auto-refresh list."
+
+**Purpose:** The connection toolbar lived in its own row below the header,
+costing a full row of vertical space that would otherwise go to the Slots tab's
+live panel + manual. Folding it into the header row reclaims that space, and
+Connect/Disconnect/Refresh were mutually exclusive by state anyway - IsConnected
+alone determines which of the two connection actions applies, and Refresh is
+really just "make sure the port list is current before connecting."
+
+**Changes:**
+- `Views/MainWindow.xaml` - header `Grid` restructured from 2 columns
+  (logo | sign-in) to 4 (logo, Auto | toolbar, Auto | flexible spacer, `*` |
+  sign-in, Auto). The toolbar (Simulator checkbox, port `ComboBox`, the merged
+  connect button, Identify slots) now sits in the header row; its own former row
+  is gone, along with the standalone Refresh button. Row count in the outer
+  `Grid` dropped from 5 to 4 (`RowDefinitions` and every `Grid.Row` index below
+  the header shifted up by one).
+- Standalone `Refresh` button removed. The port `ComboBox` instead refreshes on
+  `DropDownOpened`, handled in `Views/MainWindow.xaml.cs`
+  (`PortComboBox_DropDownOpened`) by invoking `RefreshPortsCommand` - keeps the
+  list current without a dedicated control.
+- `ViewModels/MainViewModel.cs` - `Connect()` and `Disconnect()` are now plain
+  private methods (no longer separately exposed `[RelayCommand]`s) behind one
+  new `[RelayCommand] ToggleConnection()`: disconnects if already connected,
+  otherwise refreshes the port list (real mode only) and connects, bailing with
+  a "No port selected" status if the refreshed list leaves nothing selected -
+  this also fixes a latent bug where connecting against a stale port list could
+  target a board that had re-enumerated under a different COM number after
+  being unplugged and replugged. Added `ConnectionButtonLabel` (`"Disconnect"`
+  when `IsConnected`, else `"Connect"`) so the one button's caption tracks
+  state; the `Connect`/`Disconnect` command's now-obsolete
+  `CanExecute`/`NotifyCanExecuteChanged` wiring (`CanConnect`,
+  `OnSelectedPortChanged`) was removed since the merged button has no
+  `CanExecute` gate - it's always clickable and does the right thing for
+  whatever state it's in.
+- `Window.MinWidth` raised from 900 to 960. At 900, the header's rightmost
+  content (the Sign-in button) got clipped past the window's right edge -
+  `Grid` columns don't wrap or clip overflowing content by default, so once the
+  header's three sections' combined natural width exceeded the window, content
+  either overlapped (first attempt: toolbar in a `*` column, centered, overflowed
+  into the sign-in column) or got cut off (second attempt, still at
+  `MinWidth="900"`) rather than degrading gracefully. Fixed by giving the
+  toolbar its own `Auto` column (sized to its actual content, never squeezed)
+  and moving the flexible `*` spacer between it and sign-in, then raising
+  `MinWidth` past the measured ~28px shortfall.
+- Verified end-to-end in Simulator mode via UI Automation: header renders
+  without overlap at both the default 1180px width and the new 960px minimum;
+  toggling the merged button connects (label flips to "Disconnect", all 3 demo
+  ProtoMods detected) and disconnects (label flips back); expanding the port
+  ComboBox while not in Simulator mode triggers a refresh without error.
+
+### 58. Permanent fix for the duplicate-AssemblyInfo build failure
+**2026-09-07**
+
+**Prompt:** User ran a plain `dotnet build` (no flags) in their own terminal
+and hit the `CS0579` "Duplicate AssemblyXxxAttribute" failure documented
+earlier the same day as a CLI-flag workaround (`-p:GenerateAssemblyInfo=false`).
+
+**Purpose:** A workaround that only works when the flag is remembered isn't a
+fix - the user runs `dotnet build` directly, not through anything that adds
+the flag for them. Needed something that makes the plain command just work.
+
+**Root cause, more precisely than earlier that day:** the WPF XAML temp-project
+build step (`..._wpftmp.csproj`) globs `**/*.cs` under the project's own `obj`
+folder without excluding it the way the outer project's compile does. Every
+build leaves behind an `AssemblyInfo.cs` under a randomly-suffixed
+`..._wpftmp` name that never gets cleaned up by later builds (new suffix each
+time), so they accumulate - confirmed four of them sitting in `obj` from
+earlier builds that same session. The next plain build regenerates its own
+copy and the temp project's compile picks up all of them at once.
+
+**Fix:** Added `<GenerateAssemblyInfo>false</GenerateAssemblyInfo>` to
+`ProtoVerseApp.csproj` directly, so assembly-info generation is off for every
+build regardless of how it's invoked - no CLI flag needed. Verified with a
+full clean (`obj`/`bin` deleted) followed by a plain `dotnet build`, run
+twice to confirm it wasn't a fluke of the first post-clean build (which hit an
+unrelated, one-time "generated `.g.cs` not found" error that a retry cleared -
+ordinary first-build-after-clean noise, not something that needed a fix).
+`CLAUDE.md`'s gotcha entry updated to describe the permanent fix instead of
+the now-obsolete CLI-flag workaround.
+
+### 59. Mandatory sign-in plus one-time manual-progress gate on ProtoMod controls
+**2026-09-07**
+
+**Prompt:** "lock protomod control until 'set it up section is reached in a
+manual'. This should then allow immediate use of a protomod for a given user
+account. In other words, only the first time a user interacts with a mod
+board will it delay access to it's control. Ask questions before implementing
+if necessary." Three follow-up questions were asked and answered before
+building: (1) what happens signed out - answered "Require a login. There is
+no such thing as guest mode at the moment. Add a 'remember me' check if
+available so that upon restarting the app the last user is automatically
+selected"; (2) a module with no manual (Accel+Temp) - "Never lock"; (3)
+whether accounts with pre-existing module history should be grandfathered as
+already-unlocked - "Lock everyone, including existing records."
+
+**Purpose:** Gate a ProtoMod's live controls behind having actually read its
+setup instructions at least once, without re-gating someone who already has,
+and without ever leaving a module permanently unreachable.
+
+**Changes:**
+- `Models/UserAccount.cs` - `ModuleRecord` gains `SetupUnlocked` (bool,
+  defaults `false`, including for records deserialized from a pre-existing
+  `accounts.json` written before this field existed - the explicit
+  no-grandfathering answer above).
+- `Services/AccountStore.cs` - added `HasReachedSetup(ProtoModId)` (reads the
+  flag, `false` if signed out or never recorded) and
+  `MarkSetupReached(ProtoModId)` (sets it, creating a `ModuleRecord` if
+  somehow none exists yet, no-ops if signed out or already set, otherwise
+  saves and raises `Changed`).
+- `ViewModels/SlotViewModel.cs` - now takes an `AccountStore` and computes
+  `IsControlLocked`/`LockMessage` for any slot whose `Content` is a real
+  `ModulePanelViewModelBase` (empty/unsupported/passive slots have nothing to
+  gate and are left alone): locked for "sign in" if nobody's signed in
+  (checked first, regardless of manual state - the mandatory-login answer
+  above); otherwise locked for "read the manual" if this module has one and
+  this account hasn't reached the `Id == "setup"` section yet; otherwise
+  unlocked. Subscribes to `AccountStore.Changed` (recomputes on sign-in/out/
+  switch) and, where a manual exists, `ManualViewModel.PropertyChanged` -
+  `OnManualPropertyChanged` compares `SelectedSection`'s position against
+  `"setup"`'s in the section list on every scroll-driven change (not just TOC
+  clicks, since `ManualView`'s existing scroll-tracking already updates
+  `SelectedSection` continuously - see `Views/ManualView.xaml.cs`'s
+  `OnManualScrolled`) and calls `MarkSetupReached` the first time it's at or
+  past that section. Added `SlotViewModel.Detach()` (unsubscribes both) so a
+  slot discarded by a hot-swap rebuild doesn't leak a subscription into
+  `AccountStore` - `MainViewModel.DetachModulePanels` now calls it for every
+  slot, not just the module-panel-specific dispatcher detach it already did.
+- `Views/MainWindow.xaml` - the live-panel `ContentPresenter` sits inside a
+  `Grid` whose `IsEnabled`/`Opacity` are bound to `IsControlLocked`, with a
+  lock-icon banner (bound to `LockMessage`) overlaid on top, visible only
+  while locked.
+- `Converters/BoolToVisibilityConverters.cs` - added `LockedOpacityConverter`
+  (`true` -> 0.35, `false` -> 1.0), registered in `App.xaml` alongside the
+  other shared converters.
+- **Real bug caught during verification, not left as a suspicion:** the first
+  version bound `IsEnabled`/`Opacity` directly on the `ContentPresenter`
+  itself. The lock banner rendered correctly (proving the binding path and
+  DataContext were fine), but the panel underneath stayed fully interactive -
+  caught by actually invoking a "disabled" checkbox via UI Automation's
+  `TogglePattern` and watching it really toggle, not by trusting
+  `AutomationElement.Current.IsEnabled` or the overlay's presence. Moving the
+  identical bindings onto a wrapping `Grid` fixed it immediately; see the new
+  `CLAUDE.md` gotcha for the write-up.
+- Verified end-to-end in Simulator mode against a real pre-existing account
+  ("Bur," found already signed in via "remember me," which turned out to
+  already work with no changes needed - `AccountsDocument.ActiveAccountId`
+  persists and nothing signs the app out at startup, confirmed by an actual
+  restart rather than assumed): Blinky and Electronic Load (both have
+  manuals) locked with the "read the manual" message on connect; Accel+Temp
+  (no manual) usable immediately; scrolling Blinky's manual to "Set up and
+  try it" unlocked it live and persisted `setupUnlocked: true` to
+  `accounts.json`; restarting the app kept Blinky unlocked while Electronic
+  Load stayed locked (per-module, not global); signing out re-locked Blinky
+  with the "sign in" message despite it already being unlocked for that
+  account, proving the sign-in gate is checked first and independently.

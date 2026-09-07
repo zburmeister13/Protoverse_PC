@@ -10,6 +10,15 @@
     <!-- .exe/taskbar/Explorer icon. Window.Icon (MainWindow.xaml) covers the title
          bar/Alt-Tab icon separately - both point at the same file. -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <!-- Works around an SDK 10.0.400 bug: the WPF XAML temp-project build step
+         (_wpftmp) globs **/*.cs under this project's own obj folder without
+         excluding it the way the outer project does, so it picks up every
+         AssemblyInfo.cs sitting there - the current one and any leftover from a
+         previous build's own _wpftmp pass (each gets a random suffix, so they
+         accumulate rather than get overwritten) - and fails with CS0579
+         "Duplicate AssemblyXxxAttribute". Disabling generation entirely avoids
+         it regardless of what's piled up in obj. See CLAUDE.md gotchas. -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
   <ItemGroup>

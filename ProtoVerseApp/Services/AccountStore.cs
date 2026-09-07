@@ -255,6 +255,44 @@ namespace ProtoVerseApp.Services
         public ModuleRecord? FindRecord(ProtoModId moduleId) =>
             ActiveAccount?.Modules.FirstOrDefault(m => m.ModuleId == (ushort)moduleId);
 
+        /// <summary>Whether the signed-in account has ever reached "Set up and try it"
+        /// in this module's manual - the one-time gate on its live controls. False (and
+        /// therefore locked) for a module never recorded, and for anyone signed out,
+        /// since there is no account to check.</summary>
+        public bool HasReachedSetup(ProtoModId moduleId) =>
+            FindRecord(moduleId)?.SetupUnlocked ?? false;
+
+        /// <summary>Records that the signed-in account has reached "Set up and try it"
+        /// for this module, permanently unlocking its live controls for that account.
+        /// No-ops when signed out - progress belongs to a person, and there is nobody to
+        /// attribute it to - and when already marked, so re-reading a manual doesn't
+        /// generate pointless saves.</summary>
+        public void MarkSetupReached(ProtoModId moduleId)
+        {
+            var account = ActiveAccount;
+            if (account == null)
+                return;
+
+            var record = account.Modules.FirstOrDefault(m => m.ModuleId == (ushort)moduleId);
+            if (record == null)
+            {
+                record = new ModuleRecord
+                {
+                    ModuleId = (ushort)moduleId,
+                    CircuitCode = ProtoModBoardCatalog.Entries.FirstOrDefault(e => e.Id == moduleId)?.CircuitCode,
+                };
+                account.Modules.Add(record);
+            }
+            else if (record.SetupUnlocked)
+            {
+                return;
+            }
+
+            record.SetupUnlocked = true;
+            Save();
+            Changed?.Invoke();
+        }
+
         /// <summary>Folds a pre-accounts <c>module-history.json</c> into an account, so
         /// upgrading doesn't silently lose what the app had already tracked. The old
         /// file is renamed rather than deleted - if the import goes wrong, the data is

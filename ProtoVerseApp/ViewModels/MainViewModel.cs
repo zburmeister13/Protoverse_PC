@@ -81,6 +81,11 @@ namespace ProtoVerseApp.ViewModels
         /// while simulator mode is on, since there's no real port to pick.</summary>
         public bool CanSelectRealPort => !SimulatorMode;
 
+        /// <summary>Label for the merged connect/disconnect button - one button plays
+        /// both roles rather than showing a disabled sibling for whichever action
+        /// doesn't currently apply.</summary>
+        public string ConnectionButtonLabel => IsConnected ? "Disconnect" : "Connect";
+
         public MainViewModel()
         {
             Account = new AccountViewModel(_accounts);
@@ -108,7 +113,6 @@ namespace ProtoVerseApp.ViewModels
 
             _serial = value ? new MockSerialService() : new SerialService();
             _dispatcher.SetTransport(_serial);
-            ConnectCommand.NotifyCanExecuteChanged();
             StatusMessage = value ? "Simulator mode enabled - no hardware required" : "Simulator mode disabled";
         }
 
@@ -120,7 +124,36 @@ namespace ProtoVerseApp.ViewModels
                 AvailablePorts.Add(port);
         }
 
-        [RelayCommand(CanExecute = nameof(CanConnect))]
+        /// <summary>Single button behind Connect, Disconnect, and Refresh: which of the
+        /// three makes sense is fully determined by IsConnected, so there's no state
+        /// where a user would want to choose between them - collapsing them into one
+        /// control removes a row of buttons that would otherwise sit disabled most of
+        /// the time. Refreshing right before connecting (rather than as its own step)
+        /// also fixes a real bug case: a board unplugged and replugged can re-enumerate
+        /// under a different COM number, and connecting against a stale port list would
+        /// silently target the wrong (or a now-nonexistent) port.</summary>
+        [RelayCommand]
+        private void ToggleConnection()
+        {
+            if (IsConnected)
+            {
+                Disconnect();
+                return;
+            }
+
+            if (!SimulatorMode)
+            {
+                RefreshPorts();
+                if (string.IsNullOrEmpty(SelectedPort))
+                {
+                    StatusMessage = "No port selected";
+                    return;
+                }
+            }
+
+            Connect();
+        }
+
         private void Connect()
         {
             if (!SimulatorMode && string.IsNullOrEmpty(SelectedPort))
@@ -164,12 +197,8 @@ namespace ProtoVerseApp.ViewModels
             }
         }
 
-        private bool CanConnect() => !IsConnected && (SimulatorMode || !string.IsNullOrEmpty(SelectedPort));
+        partial void OnIsConnectedChanged(bool value) => OnPropertyChanged(nameof(ConnectionButtonLabel));
 
-        partial void OnSelectedPortChanged(string? value) => ConnectCommand.NotifyCanExecuteChanged();
-        partial void OnIsConnectedChanged(bool value) => ConnectCommand.NotifyCanExecuteChanged();
-
-        [RelayCommand]
         private void Disconnect()
         {
             _dispatcher.Disconnect();
@@ -241,7 +270,7 @@ namespace ProtoVerseApp.ViewModels
                 var moduleId = (ProtoModId)(ushort)(frame.Payload[slot * 2] | (frame.Payload[slot * 2 + 1] << 8));
                 if (moduleId == ProtoModId.None)
                 {
-                    newPanels.Add(SlotViewModel.Empty(slot));
+                    newPanels.Add(SlotViewModel.Empty(slot, _accounts));
                     continue;
                 }
 
@@ -257,7 +286,7 @@ namespace ProtoVerseApp.ViewModels
                 {
                     var panel = ModuleCatalog.TryCreate(moduleId, _dispatcher);
                     newPanels.Add(panel != null
-                        ? new SlotViewModel(slot, panel, moduleId, SlotState.Occupied, panel.DisplayName)
+                        ? new SlotViewModel(slot, panel, moduleId, SlotState.Occupied, panel.DisplayName, _accounts)
                         : BuildUnsupportedSlot(slot, moduleId));
                 }
                 catch (Exception ex)
@@ -288,10 +317,16 @@ namespace ProtoVerseApp.ViewModels
         /// detached or block a hot-swap rebuild from completing.</summary>
         private void DetachModulePanels()
         {
-            foreach (var module in Slots.Select(s => s.Content).OfType<ModulePanelViewModelBase>())
+            foreach (var slot in Slots)
             {
-                try { module.Detach(); }
+                try { slot.Detach(); }
                 catch { /* best-effort cleanup, see doc comment above */ }
+
+                if (slot.Content is ModulePanelViewModelBase module)
+                {
+                    try { module.Detach(); }
+                    catch { /* best-effort cleanup, see doc comment above */ }
+                }
             }
         }
 
@@ -300,7 +335,7 @@ namespace ProtoVerseApp.ViewModels
         /// deliberately short - the full explanation stays in the detail pane, since a
         /// 200px navigator row can't carry "ProtoCore doesn't recognize its EEPROM
         /// identity".</summary>
-        private static SlotViewModel BuildUnsupportedSlot(int slot, ProtoModId moduleId)
+        private SlotViewModel BuildUnsupportedSlot(int slot, ProtoModId moduleId)
         {
             // A board that is passive by design isn't unsupported - there is nothing to
             // support. Checked before the unsupported path so it never renders with an
@@ -309,7 +344,7 @@ namespace ProtoVerseApp.ViewModels
             if (passiveName != null)
             {
                 return new SlotViewModel(slot, new PassiveModuleViewModel(moduleId, passiveName),
-                    moduleId, SlotState.Occupied, passiveName);
+                    moduleId, SlotState.Occupied, passiveName, _accounts);
             }
 
             var circuitCode = ProtoModBoardCatalog.Entries.FirstOrDefault(e => e.Id == moduleId)?.CircuitCode;
@@ -317,7 +352,7 @@ namespace ProtoVerseApp.ViewModels
                 ? "Unrecognized board"
                 : circuitCode ?? $"0x{(ushort)moduleId:X4}";
 
-            return new SlotViewModel(slot, new UnknownModuleViewModel(moduleId), moduleId, SlotState.Unsupported, label);
+            return new SlotViewModel(slot, new UnknownModuleViewModel(moduleId), moduleId, SlotState.Unsupported, label, _accounts);
         }
 
         /// <summary>Keeps the detail pane pointed somewhere sensible after a hot-swap:
@@ -340,7 +375,7 @@ namespace ProtoVerseApp.ViewModels
             DetachModulePanels();
             Slots.Clear();
             for (int i = 0; i < SlotCount; i++)
-                Slots.Add(SlotViewModel.Empty(i));
+                Slots.Add(SlotViewModel.Empty(i, _accounts));
 
             RestoreSelection();
 

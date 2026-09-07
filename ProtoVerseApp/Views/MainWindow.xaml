@@ -4,13 +4,19 @@
         xmlns:vm="clr-namespace:ProtoVerseApp.ViewModels"
         xmlns:views="clr-namespace:ProtoVerseApp.Views"
         xmlns:conv="clr-namespace:ProtoVerseApp.Converters"
-        Title="ProtoVerse" Height="780" Width="1180" MinWidth="900" MinHeight="600"
+        Title="ProtoVerse" Height="780" Width="1180" MinWidth="960" MinHeight="600"
         Icon="/Assets/AppIcon.ico"
         Background="{StaticResource BgBrush}" Foreground="{StaticResource TextPrimaryBrush}">
 
     <!-- Sized 1180x780 on the manuals eval branch: the Slots tab now carries a slot
          navigator, a live panel and a manual with its own table of contents, and at
-         the previous 900px the manual body was squeezed to about 500px. -->
+         the previous 900px the manual body was squeezed to about 500px.
+
+         MinWidth raised from 900 to 960 when the connection toolbar moved into the
+         header row (logo | toolbar | sign-in): at 900 the header's rightmost content
+         (the Sign-in button) got clipped past the window's right edge - Grid columns
+         don't wrap, so once the three header sections' combined natural width exceeds
+         the window, something has to give, and this is the width below which it does. -->
 
     <Window.Resources>
 
@@ -53,20 +59,25 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Brand header: orbit mark + wordmark + tagline, with the sign-in control
-             pinned to the right. -->
-        <Grid Grid.Row="0" Margin="0,0,0,18">
+        <!-- Brand header: orbit mark + wordmark + tagline, the connection toolbar
+             (simulator toggle, port picker, connect/disconnect, identify) filling the
+             middle, and the sign-in control pinned to the right. The toolbar used to be
+             its own row below this one; folding it in here reclaims a full row of
+             vertical space for the manual/mod content below, which is the scarcer
+             resource on a laptop-height window. -->
+        <Grid Grid.Row="0" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Column="0" Orientation="Horizontal">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
             <Viewbox Width="40" Height="40" Margin="0,0,12,0">
                 <Canvas Width="44" Height="44">
                     <Ellipse Canvas.Left="2" Canvas.Top="12" Width="40" Height="20"
@@ -91,10 +102,27 @@
             </StackPanel>
         </StackPanel>
 
+            <!-- Connection toolbar. The port list refreshes itself (on dropdown-open
+                 and right before connecting) rather than needing an explicit Refresh
+                 button, and Connect/Disconnect share one button since IsConnected
+                 already determines unambiguously which of the two applies. -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                        Margin="24,0,0,0">
+                <CheckBox Content="Simulator mode" IsChecked="{Binding SimulatorMode}"
+                          VerticalAlignment="Center" Margin="0,0,20,0"/>
+                <ComboBox ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}"
+                          Width="120" Margin="0,0,8,0" IsEnabled="{Binding CanSelectRealPort}"
+                          DropDownOpened="PortComboBox_DropDownOpened"/>
+                <Button Content="{Binding ConnectionButtonLabel}" Command="{Binding ToggleConnectionCommand}"
+                        MinWidth="90" Margin="0,0,20,0"/>
+                <Button Content="Identify slots" Command="{Binding IdentifySlotsCommand}" MinWidth="100"
+                        IsEnabled="{Binding IsConnected}"/>
+            </StackPanel>
+
             <!-- Sign-in control. Profiles keep two people's kit tracking apart on a
                  shared PC; they are deliberately not a security feature (no password),
                  which is why this is a name and a button rather than a login form. -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                 <StackPanel VerticalAlignment="Center" Margin="0,0,10,0" HorizontalAlignment="Right">
                     <TextBlock Text="{Binding Account.DisplayName}" FontSize="12" FontWeight="SemiBold"
                                HorizontalAlignment="Right"
@@ -116,22 +144,7 @@
             </StackPanel>
         </Grid>
 
-        <!-- Connection bar -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-            <CheckBox Content="Simulator mode" IsChecked="{Binding SimulatorMode}"
-                      VerticalAlignment="Center" Margin="0,0,20,0"/>
-            <ComboBox ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}"
-                      Width="120" Margin="0,0,8,0" IsEnabled="{Binding CanSelectRealPort}"/>
-            <Button Content="Refresh" Command="{Binding RefreshPortsCommand}" MinWidth="70" Margin="0,0,8,0"
-                    IsEnabled="{Binding CanSelectRealPort}"/>
-            <Button Content="Connect" Command="{Binding ConnectCommand}" MinWidth="80" Margin="0,0,4,0"/>
-            <Button Content="Disconnect" Command="{Binding DisconnectCommand}" MinWidth="80" Margin="0,0,20,0"
-                    IsEnabled="{Binding IsConnected}"/>
-            <Button Content="Identify slots" Command="{Binding IdentifySlotsCommand}" MinWidth="100"
-                    IsEnabled="{Binding IsConnected}"/>
-        </StackPanel>
-
-        <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Margin="0,0,0,8"
+        <TextBlock Grid.Row="1" Text="{Binding StatusMessage}" Margin="0,0,0,8"
                     Foreground="{StaticResource TextSecondaryBrush}"/>
 
         <!--
@@ -146,7 +159,7 @@
             one sits in a bounded Height="*" row and its content must scroll inside
             that row - see the comment on that style in App.xaml.
         -->
-        <TabControl Grid.Row="3" Style="{StaticResource MainTabControlStyle}">
+        <TabControl Grid.Row="2" Style="{StaticResource MainTabControlStyle}">
         <TabItem Header="Slots">
         <!--
             Slot navigator + workspace, replacing the previous stacked-panel list
@@ -251,8 +264,25 @@
                             <TextBlock Text="{Binding Label}" FontWeight="Bold" FontSize="14"/>
                         </StackPanel>
                         <!-- The module's own panel, unchanged - same view models and
-                             DataTemplates the stacked layout used. -->
-                        <ContentPresenter Content="{Binding Content}"/>
+                             DataTemplates the stacked layout used - dimmed and disabled
+                             underneath a lock overlay until SlotViewModel says this
+                             account has cleared both gates (signed in; and, if this
+                             module has a manual, reached its "Set up and try it"). -->
+                        <Grid>
+                            <Grid IsEnabled="{Binding IsControlLocked, Converter={StaticResource InverseBoolConverter}}"
+                                  Opacity="{Binding IsControlLocked, Converter={StaticResource LockedOpacityConverter}}">
+                                <ContentPresenter Content="{Binding Content}"/>
+                            </Grid>
+                            <Border Background="{StaticResource SurfaceAltBrush}" CornerRadius="6" Padding="14,10"
+                                    HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                                    Visibility="{Binding IsControlLocked, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#128274;" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding LockMessage}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
                     </StackPanel>
                 </Border>
 
@@ -280,7 +310,7 @@
         <!-- Collapsible bottom area: raw traffic log (every frame sent/received, hex +
              decoded) and Help (revision notes + currently supported ProtoMods), as
              tabs sharing one collapsible section. -->
-        <Expander Grid.Row="4" Header="Traffic Log &amp; Help" Margin="0,8,0,0"
+        <Expander Grid.Row="3" Header="Traffic Log &amp; Help" Margin="0,8,0,0"
                   IsExpanded="{Binding TrafficLog.IsExpanded}">
             <TabControl>
                 <TabItem Header="Traffic Log">

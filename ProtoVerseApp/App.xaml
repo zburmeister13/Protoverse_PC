@@ -10,6 +10,7 @@
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
         <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
         <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+        <conv:LockedOpacityConverter x:Key="LockedOpacityConverter"/>
 
         <!--
             ProtoVerse brand palette. Background/surface ramp is near-black (swapped
