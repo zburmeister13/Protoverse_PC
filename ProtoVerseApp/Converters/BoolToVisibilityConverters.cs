@@ -57,4 +57,16 @@ namespace ProtoVerseApp.Converters
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
             value is not true;
     }
+
+    /// <summary>true -&gt; dimmed (0.35), false -&gt; fully opaque. Used on a locked
+    /// ProtoMod panel: the controls sit disabled underneath a lock banner, and dimming
+    /// them too makes "disabled" read as "disabled" rather than "broken."</summary>
+    public class LockedOpacityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+            value is true ? 0.35 : 1.0;
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+            throw new NotSupportedException();
+    }
 }

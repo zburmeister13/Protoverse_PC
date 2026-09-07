@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using ProtoVerseApp.ViewModels;
 
@@ -45,6 +46,15 @@ namespace ProtoVerseApp.Views
             dialog.ShowDialog();
             // No result handling needed: the dialog writes through AccountStore, whose
             // Changed event already repaints the header and the Library.
+        }
+
+        /// <summary>Keeps the port list current without a dedicated Refresh button -
+        /// re-reads available ports the moment the dropdown opens, so it's never
+        /// showing stale data by the time the user is choosing from it.</summary>
+        private void PortComboBox_DropDownOpened(object sender, EventArgs e)
+        {
+            if (DataContext is MainViewModel main)
+                main.RefreshPortsCommand.Execute(null);
         }
     }
 }

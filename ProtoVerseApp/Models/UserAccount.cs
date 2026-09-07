@@ -46,6 +46,15 @@ namespace ProtoVerseApp.Models
 
         [JsonPropertyName("kitStatus")]
         public KitStatus KitStatus { get; set; } = KitStatus.Unanswered;
+
+        /// <summary>Whether this account has scrolled far enough into this module's
+        /// in-app manual to reach "Set up and try it" - the one-time gate on using its
+        /// live controls (2026-09-07: every account starts locked out the first time it
+        /// meets a given ProtoMod type, including one already recorded from before this
+        /// flag existed - deserializing an older accounts.json where this property is
+        /// absent defaults it to false, which is the locked state, intentionally).</summary>
+        [JsonPropertyName("setupUnlocked")]
+        public bool SetupUnlocked { get; set; }
     }
 
     /// <summary>

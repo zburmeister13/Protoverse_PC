@@ -75,7 +75,6 @@ namespace ProtoVerseApp.Models.Manual
                         "Four lights you can control one at a time, or all together.",
                         "Each one has its own wire coming from ProtoCore, so they never interfere with each other.",
                         "Turning a wire on means putting 3.3 volts on it. That is what lights the LED.",
-                        "A small memory chip on the board tells ProtoCore what it is, which is why this manual appeared as soon as you plugged it in.",
                     }),
                     new ParagraphBlock(
                         "By the end you will have made a digital output do something visible, and met the idea underneath every other board in this series: a wire is either on or off, and that is enough to build everything else from."),
@@ -212,12 +211,6 @@ namespace ProtoVerseApp.Models.Manual
                         new ManualStep(
                             "Slow the blink rate right down to 1000 ms and watch Bounce again if you are not sure."),
                     }, Numbered: true),
-                    new SubheadingBlock("Build one yourself: count in binary"),
-                    new ParagraphBlock(
-                        "This is the one the board cannot do for you, so you will drive it by hand. Treat the four LEDs as four binary digits, with a lit LED meaning 1 and an unlit one meaning 0. Counting up in binary goes 0000, 0001, 0010, 0011, 0100 - each step adds one, exactly like ordinary counting except each column only ever holds 0 or 1 before it rolls over."),
-                    new ParagraphBlock(
-                        "Click your way from 0 to 15, one number at a time. It is fiddly on purpose: by about 7 you will have a strong instinct for why a computer does this with a clock rather than a person doing it with a mouse, and you will have seen that four on-or-off wires can represent sixteen different values."),
-                    ManualBoilerplate.NoSingleCorrectAnswer,
                     new SubheadingBlock("Something to think about"),
                     new ParagraphBlock(
                         "Can you name a real device where a blink pattern - not just on or off, but the rhythm of it - tells you something? Router lights, charging indicators and fault lamps are all worth considering. What do you think the different speeds are meant to mean, and how would you know if you were guessing wrong?"),

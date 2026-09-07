@@ -566,6 +566,38 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   rule. Should eventually move to a JSON/manifest source shared with the
   manual docs — the records are already flat and JSON-friendly, and
   `Entries` is the only thing the rest of the app reads.
+- **Signing in is now mandatory to control a ProtoMod, and each account
+  unlocks a module's controls once, permanently, by reading its manual**
+  (user decision, 2026-09-07: "there is no such thing as guest mode" - this
+  narrows, but does not reverse, the "not a security feature" framing above;
+  profiles are still just a name with no password, the gate is about
+  attributing progress to someone, not keeping anyone out who's willing to
+  click "Sign in"). `SlotViewModel.IsControlLocked`/`LockMessage` compute two
+  independent gates, checked in order, for any slot whose `Content` is a real
+  `ModulePanelViewModelBase` (an empty/unsupported/passive slot has nothing to
+  gate): **(1)** nobody signed in - locked, "Sign in to control this
+  ProtoMod," full stop, regardless of manual state; **(2)** signed in but this
+  account has never scrolled `ManualViewModel.SelectedSection` as far as the
+  section with `Id == "setup"` ("3. Set up and try it," the same id in every
+  manual) - locked, "Read through ... to unlock"; **(3)** otherwise unlocked.
+  A module with no manual yet (Accel+Temp today) skips gate 2 entirely rather
+  than locking forever with no way to clear it. Reaching "setup" persists
+  immediately via a new `ModuleRecord.SetupUnlocked` bool
+  (`AccountStore.MarkSetupReached`/`HasReachedSetup`) - ordinary accounts.json
+  storage, same file, same degrade-to-nothing-on-I/O-error behavior as
+  everything else there - so it survives a restart and does not need
+  re-earning; per the user's explicit call, this applies even to a
+  `ModuleRecord` that already existed before this feature shipped (no
+  grandfathering - deserializing an older record with the property absent
+  defaults it to `false`, i.e. locked). `SlotViewModel` subscribes to both
+  `AccountStore.Changed` (sign-in/out/switch) and, where a manual exists, the
+  manual's own `PropertyChanged` in its constructor, and must be unhooked via
+  its own `Detach()` (added alongside `ModulePanelViewModelBase.Detach()` in
+  `MainViewModel.DetachModulePanels`) or a discarded slot from a hot-swap
+  rebuild leaks a live subscription into `AccountStore`. **"Remember me" was
+  already there before this feature** - `AccountsDocument.ActiveAccountId` is
+  persisted and restored on load, and nothing signs the app out at startup -
+  confirmed by directly restarting the app mid-session, not assumed.
 - **In-app manuals: E05 is the template, and difficulty is pitched per
   family.** Two standing directions from the user (2026-08-31), which apply to
   every ProtoMod lab written from here on. They live in this file rather than
@@ -829,7 +861,50 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   tools). If a restructure needs to remove that directory, move its *contents*
   elsewhere and leave the empty shell for the user to delete after closing/
   reopening VS Code, rather than fighting the lock.
-
+- **A plain `dotnet build`/`dotnet run` could fail with `CS0579` "Duplicate
+  AssemblyXxxAttribute" errors**, even against a fully clean `obj`/`bin`. Seen
+  with .NET SDK 10.0.400 building this `net8.0-windows` project: the WPF XAML
+  temp-project pass (`..._wpftmp.csproj`) globs `**/*.cs` under this project's
+  own `obj` folder without excluding it the way the outer project does, so it
+  picks up every `AssemblyInfo.cs` sitting there — the fresh one plus any
+  leftover from an earlier build's own temp pass (each gets a random suffix,
+  so they pile up across builds instead of being overwritten) — and fails on
+  the duplicates. **Fixed permanently** by setting
+  `<GenerateAssemblyInfo>false</GenerateAssemblyInfo>` in
+  `ProtoVerseApp.csproj` (2026-09-07) — a plain `dotnet build` with no flags
+  now works; the `-p:GenerateAssemblyInfo=false` CLI workaround from earlier
+  the same day is obsolete now that it's in the project file. If this ever
+  resurfaces, deleting `obj`/`bin` first rules out old leftovers as the cause
+  before assuming the underlying SDK bug regressed.
+- **Manual content (`Models/Manual/*.cs`, e.g. `BlinkyManual.cs`) is compiled
+  C#, not loaded from disk at runtime.** Editing it and then launching the
+  already-built `.exe` directly (rather than `dotnet build`/`dotnet run`)
+  shows the old text with no error of any kind — nothing is wrong to report,
+  the running process just predates the edit. Confirmed by comparing the
+  source file's write time against the `.dll`/`.exe`'s (2026-09-07). Always
+  rebuild after touching a manual file before judging whether a content
+  change landed.
+- **Binding `IsEnabled` directly on a `ContentPresenter` does not disable its
+  templated content** - the property change applies to the `ContentPresenter`
+  itself (a sibling `Visibility` binding on the same DataContext updates
+  correctly, proving the binding path and DataContext are both fine), but
+  every control inside the DataTemplate-generated content
+  (`Views/BlinkyLedPanel.xaml`'s checkboxes/buttons/etc.) stayed genuinely
+  clickable - confirmed by invoking a "disabled" checkbox via UI Automation's
+  `TogglePattern` and having it actually toggle with no
+  `ElementNotEnabledException`, and separately by a same-source `Opacity`
+  binding on that same `ContentPresenter` not visually dimming anything
+  either. Moving the identical binding onto a plain `Grid` wrapping the
+  `ContentPresenter` (`<Grid IsEnabled="{Binding ...}"><ContentPresenter .../>
+  </Grid>`) fixed both immediately - inheritance works through a `Grid`, just
+  apparently not through a `ContentPresenter`'s generated content the same
+  way (2026-09-07). Never bind `IsEnabled`/`Opacity` straight onto a
+  `ContentPresenter` that hosts a DataTemplate-selected view in this app -
+  wrap it in a `Grid` (or other plain container) first, and verify with an
+  actual disabled-interaction test (UI Automation invoke should throw
+  `ElementNotEnabledException`), not just by reading `AutomationElement.
+  Current.IsEnabled` or trusting that an overlay merely being visible means
+  the content under it is inert.
 - **PowerShell variable names are case-insensitive**, so a `$sources` hashtable
   and a `$SourceRoot`-style parameter are fine, but `$sources` and `$Sources`
   are the *same variable* - assigning one silently destroys the other. Cost a
