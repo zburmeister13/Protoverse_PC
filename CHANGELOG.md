@@ -3129,3 +3129,57 @@ and without ever leaving a module permanently unreachable.
   Load stayed locked (per-module, not global); signing out re-locked Blinky
   with the "sign in" message despite it already being unlocked for that
   account, proving the sign-in gate is checked first and independently.
+
+### 60. ProtoMod scale framework evaluation (branch: eval/long-term-scaling)
+**2026-09-07**
+
+**Prompt:** A prompt document (`protomod-scale-eval-prompt.md`) asking for an
+evaluation - not shipped production work - of whether the ProtoMod
+identification framework holds up at a 100s-1000+ module catalog scale,
+covering ID capacity, app-side hardware-revision recognition (EEPROM already
+stores it; the app doesn't use it), and multi-slot ProtoMod inference,
+"work on a throwaway branch... report back with a written recommendation."
+Clarified before implementation: a multi-slot module identifies from its
+lowest-numbered occupied slot, spanning upward - "the second slot must
+[be] assumed to be one higher than the communication slot based on hardware
+interface" - resolving the task's open "which slot reports identification"
+question with a fixed rule rather than a per-module inference.
+
+**Purpose:** De-risk the identity model before the ProtoMod catalog grows
+past a handful of hand-maintained entries, without committing to shipping
+any of it yet.
+
+**Branch:** `eval/long-term-scaling`, off `main` - not merged as part of this
+work, per the prompt's explicit instruction.
+
+**What was built** (see `EVALUATION.md` on that branch for the full
+write-up): a JSON-backed `(ProtoModId, Revision)` registry
+(`Models/Registry/`) with a loader, a validator (duplicate identity, missing
+revision, slot-span-vs-slot-count, dangling compatibility override) doubling
+as a CI check, a revision-aware catalog with three lookup outcomes (Found /
+UnrecognizedRevision / UnknownId - a recognized ID with an unfamiliar
+revision is never assumed to behave like a familiar one) and an explicit,
+human-authored compatibility-override mechanism, and a multi-slot resolver
+implementing the anchor-and-span-upward rule with conflict detection. A new
+`ProtoVerseApp.Tests` xUnit project (27 tests) covers all of it, including a
+1000-entry synthetic stress test proving catalog lookup stays nowhere near a
+performance concern at that scale and that the validator catches injected
+duplicate/span/override errors specifically.
+
+**Key findings:** ID capacity was already solved (widened to 2 bytes on
+2026-08-30, ~65,500 usable values - nothing to do here). Keying the catalog
+on `(ID, Revision)` is a contained, mechanical change - the real gap is one
+level up: `PresenceReport` has no revision field at all today, so this is
+fully demonstrated against synthetic/test data but has no live-hardware
+integration point yet; flagged as a firmware-cross-session wire-protocol
+question rather than decided unilaterally, per the prompt's constraints.
+Two of the task's three multi-slot edge cases turned out to be the same
+case from the app's perspective once the anchor rule was fixed - a hardware
+fault, a partially-seated board, and two independent modules colliding with
+a multi-slot claim are indistinguishable from the identification handshake
+alone, so the resolver treats all three as one conflict type rather than
+inventing a distinction the data can't actually support.
+
+**Recommendation:** proceed - see EVALUATION.md for the full reasoning and
+the one concrete next step (raising the `PresenceReport` revision-byte
+extension with the firmware session).
