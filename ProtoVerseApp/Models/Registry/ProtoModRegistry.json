@@ -1,37 +1,49 @@
 {
-  "$comment": "Real ProtoMod identities only - every entry here must correspond to an actual, currently-shipped board. Do not add a fictional/example/synthetic entry to this file; see ProtoVerseApp.Tests/Fixtures for that. All boards shipped as of this evaluation (2026-09-07) are Revision A - there is no Rev B hardware yet.",
+  "$comment": "Real ProtoMod identities only - every entry here must correspond to an actual, currently-shipped board. Do not add a fictional/example/synthetic entry to this file; see ProtoVerseApp.Tests/Fixtures for that. All boards shipped as of this evaluation (2026-09-07) are Revision A - there is no Rev B hardware yet. This is now the single source of truth ModuleCatalog, ManualLibrary, and ProtoModBoardCatalog all read from - see ProtoModRegistryService.",
   "entries": [
     {
       "id": 1,
       "revision": "A",
       "name": "Blinky LED",
+      "circuitCode": "F01",
       "manualReference": "BlinkyManual",
       "controlScheme": "BlinkyLedViewModel",
-      "slotSpan": 1
+      "slotSpan": 1,
+      "pcbRev": "R1",
+      "pcbaRev": "R1"
     },
     {
       "id": 2,
       "revision": "A",
       "name": "Accelerometer + Temperature",
+      "circuitCode": "E03",
       "manualReference": null,
       "controlScheme": "AccelTempViewModel",
-      "slotSpan": 1
+      "slotSpan": 1,
+      "pcbRev": "R1",
+      "pcbaRev": "R1"
     },
     {
       "id": 3,
       "revision": "A",
       "name": "Electronic Load",
+      "circuitCode": "E05",
       "manualReference": "ElectronicLoadManual",
       "controlScheme": "ElectronicLoadViewModel",
-      "slotSpan": 1
+      "slotSpan": 1,
+      "pcbRev": "R1",
+      "pcbaRev": "R1"
     },
     {
       "id": 4,
       "revision": "A",
       "name": "Simple LED",
+      "circuitCode": "F02",
       "manualReference": "SimpleLedManual",
       "controlScheme": "Passive",
-      "slotSpan": 1
+      "slotSpan": 1,
+      "pcbRev": "R1",
+      "pcbaRev": "R1"
     }
   ]
 }

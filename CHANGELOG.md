@@ -3183,3 +3183,73 @@ inventing a distinction the data can't actually support.
 **Recommendation:** proceed - see EVALUATION.md for the full reasoning and
 the one concrete next step (raising the `PresenceReport` revision-byte
 extension with the firmware session).
+
+### 61. Consolidate ModuleCatalog/ManualLibrary/ProtoModBoardCatalog onto the registry (branch: feature/protomod-single-source-of-truth)
+**2026-09-08**
+
+**Prompt:** After reading EVALUATION.md, the user asked whether anything else
+should be done now for future modularity given the number of ProtoMods is
+expected to grow substantially. Answer: three separate hardcoded
+`Dictionary<ProtoModId, ...>`s (`ModuleCatalog`, `ManualLibrary`,
+`ProtoModBoardCatalog`) already independently define "what is this
+ProtoMod," with no way to catch them disagreeing - which had already
+happened once (the AccelTemp/F02 circuit-code mixup). Recommended
+consolidating them onto the eval branch's registry as the highest-leverage
+fix. The user's reply: "create a single source of truth - now."
+
+**Purpose:** Turn the three independently hand-maintained identity
+dictionaries into one authored place, so a real drift bug like the one
+already shipped once becomes structurally impossible rather than merely
+avoided by care.
+
+**Branch:** `feature/protomod-single-source-of-truth`, off
+`eval/long-term-scaling` (inherits its registry/validator/catalog/resolver
+work and its test project). Real work, not a spike - not merged as part of
+this entry, pending review.
+
+**Changes:**
+- `ProtoModRegistryEntry` gains `CircuitCode` (required - the field that
+  actually drifted before) and optional `PcbRev`/`PcbaRev` (carried forward
+  from `ProtoModBoardCatalog`, informational, still unused by any UI, same as
+  before). `ProtoModRegistry.json` updated with the real circuit codes/PCB
+  revs for all four shipped identities.
+- `ProtoModRegistryValidator` gains a check for a missing circuit code,
+  matching its existing "missing revision" check.
+- New `ProtoModRegistryService` - the one lazily-loaded, validated instance
+  of the registry the rest of the app reads from. Throws loudly on first
+  access if the registry itself is malformed (undefined "which panel for
+  which board" is worse than a loud failure). Exposes
+  `FindByIdAssumingDefaultRevision`, used by every current call site, since
+  nothing on the wire carries a real revision yet (see EVALUATION.md) -
+  `DefaultRevision = "A"` is the one place that assumption lives, ready to be
+  replaced once `PresenceReport` actually carries a revision byte.
+- `ModuleCatalog`, `ManualLibrary`, and `ProtoModBoardCatalog` rewritten to
+  read from `ProtoModRegistryService` instead of their own dictionaries -
+  **every external call site (`MainViewModel`, `AccountStore`,
+  `HelpViewModel`, `PassiveModuleViewModel`, `UnknownModuleViewModel`,
+  `SlotViewModel`) is unchanged**, since all three kept their exact public
+  API. `ModuleCatalog` and `ManualLibrary` still each own one small
+  string-keyed factory dictionary (control-scheme name -> panel constructor;
+  manual-reference name -> manual factory) - real new UI/content still needs
+  real new code; only the *identity* mapping (which ID uses which scheme/
+  manual) moved to the registry. A registry entry with `"controlScheme":
+  "Passive"` is now how a board is marked passive, replacing the old
+  `ModuleCatalog.Passive` dictionary.
+- `ProtoModLibraryCatalog` (the Library tab's rich, sourced editorial catalog)
+  deliberately left alone - it isn't identity data, and covers real boards
+  with no `ProtoModId` yet (A01, F00) that the registry can't represent.
+  Instead, new `CrossCatalogConsistencyTests` check the two agree wherever
+  they overlap, in both directions (every Library entry with a `ProtocolId`
+  matches the registry's circuit code for that id; every registry entry has a
+  matching Library entry) - this is the guardrail against the AccelTemp/F02
+  class of bug recurring, without merging unrelated content models.
+- Verified end-to-end, not just unit-tested: full solution build, all 29
+  tests passing (27 existing + 2 new cross-catalog checks), and the actual
+  app run in Simulator mode - presence detection, all three live panels,
+  the manual-progress lock overlay, and the Help tab's "Currently supported
+  ProtoMods" list (circuit codes included) all confirmed identical to
+  pre-consolidation behavior.
+- `CLAUDE.md` updated: the "adding a new ProtoMod" and "passive board"
+  passages now describe the registry-driven flow instead of the old
+  per-dictionary one, and a new note explains why `ProtoModLibraryCatalog`
+  stays separate on purpose.

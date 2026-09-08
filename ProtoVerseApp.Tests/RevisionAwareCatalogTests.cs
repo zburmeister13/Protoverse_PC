@@ -6,8 +6,9 @@ namespace ProtoVerseApp.Tests
 {
     public class RevisionAwareCatalogTests
     {
-        private static readonly ProtoModRegistryEntry RevA =
-            new(1, "A", "Widget", "WidgetManual", "WidgetViewModel", SlotSpan: 1);
+        private static readonly ProtoModRegistryEntry RevA = new(
+            Id: 1, Revision: "A", Name: "Widget", CircuitCode: "W01",
+            ManualReference: "WidgetManual", ControlScheme: "WidgetViewModel", SlotSpan: 1);
 
         [Fact]
         public void KnownIdAndRevision_ResolvesFound()
@@ -45,8 +46,10 @@ namespace ProtoVerseApp.Tests
         [Fact]
         public void CompatibilityOverride_ResolvesToTargetRevisionsControlScheme()
         {
-            var revB = new ProtoModRegistryEntry(1, "B", "Widget Rev B", "WidgetManualB",
-                ControlScheme: "ignored-should-not-be-used", SlotSpan: 1, CompatibleWithRevision: "A");
+            var revB = new ProtoModRegistryEntry(
+                Id: 1, Revision: "B", Name: "Widget Rev B", CircuitCode: "W01",
+                ManualReference: "WidgetManualB", ControlScheme: "ignored-should-not-be-used",
+                SlotSpan: 1, CompatibleWithRevision: "A");
             var catalog = new RevisionAwareModuleCatalog(new[] { RevA, revB });
 
             var result = catalog.Resolve(1, "B");
@@ -62,7 +65,9 @@ namespace ProtoVerseApp.Tests
             // Two revisions, neither declaring an override - "B" must not silently
             // behave like "A" just because a naive scheme might treat B as "newer than
             // and therefore compatible with" A.
-            var revBNoOverride = new ProtoModRegistryEntry(1, "B", "Widget Rev B", null, "WidgetBViewModel", SlotSpan: 1);
+            var revBNoOverride = new ProtoModRegistryEntry(
+                Id: 1, Revision: "B", Name: "Widget Rev B", CircuitCode: "W01",
+                ManualReference: null, ControlScheme: "WidgetBViewModel", SlotSpan: 1);
             var catalog = new RevisionAwareModuleCatalog(new[] { RevA, revBNoOverride });
 
             var result = catalog.Resolve(1, "B");
@@ -74,8 +79,12 @@ namespace ProtoVerseApp.Tests
         [Fact]
         public void CompatibilityChain_ResolvesTransitively()
         {
-            var revB = new ProtoModRegistryEntry(1, "B", "Widget Rev B", null, "ignored", SlotSpan: 1, CompatibleWithRevision: "A");
-            var revC = new ProtoModRegistryEntry(1, "C", "Widget Rev C", null, "ignored", SlotSpan: 1, CompatibleWithRevision: "B");
+            var revB = new ProtoModRegistryEntry(
+                Id: 1, Revision: "B", Name: "Widget Rev B", CircuitCode: "W01",
+                ManualReference: null, ControlScheme: "ignored", SlotSpan: 1, CompatibleWithRevision: "A");
+            var revC = new ProtoModRegistryEntry(
+                Id: 1, Revision: "C", Name: "Widget Rev C", CircuitCode: "W01",
+                ManualReference: null, ControlScheme: "ignored", SlotSpan: 1, CompatibleWithRevision: "B");
             var catalog = new RevisionAwareModuleCatalog(new[] { RevA, revB, revC });
 
             var result = catalog.Resolve(1, "C");
@@ -89,8 +98,12 @@ namespace ProtoVerseApp.Tests
             // Validator should reject this in practice (self/dangling reference
             // checks), but the catalog itself must not infinite-loop if it's ever
             // handed unvalidated data - defense in depth.
-            var revA = new ProtoModRegistryEntry(1, "A", "Widget", null, "A-scheme", SlotSpan: 1, CompatibleWithRevision: "B");
-            var revB = new ProtoModRegistryEntry(1, "B", "Widget", null, "B-scheme", SlotSpan: 1, CompatibleWithRevision: "A");
+            var revA = new ProtoModRegistryEntry(
+                Id: 1, Revision: "A", Name: "Widget", CircuitCode: "W01",
+                ManualReference: null, ControlScheme: "A-scheme", SlotSpan: 1, CompatibleWithRevision: "B");
+            var revB = new ProtoModRegistryEntry(
+                Id: 1, Revision: "B", Name: "Widget", CircuitCode: "W01",
+                ManualReference: null, ControlScheme: "B-scheme", SlotSpan: 1, CompatibleWithRevision: "A");
             var catalog = new RevisionAwareModuleCatalog(new[] { revA, revB });
 
             var result = catalog.Resolve(1, "A");

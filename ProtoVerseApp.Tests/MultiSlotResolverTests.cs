@@ -15,7 +15,9 @@ namespace ProtoVerseApp.Tests
         private static MultiSlotResolver ResolverWithSpans(params (ushort Id, int Span)[] modules)
         {
             var entries = modules
-                .Select(m => new ProtoModRegistryEntry(m.Id, "A", $"Module 0x{m.Id:X4}", null, "SomeViewModel", m.Span))
+                .Select(m => new ProtoModRegistryEntry(
+                    Id: m.Id, Revision: "A", Name: $"Module 0x{m.Id:X4}", CircuitCode: $"T{m.Id:X2}",
+                    ManualReference: null, ControlScheme: "SomeViewModel", SlotSpan: m.Span))
                 .ToList();
             return new MultiSlotResolver(new RevisionAwareModuleCatalog(entries), SlotCount);
         }

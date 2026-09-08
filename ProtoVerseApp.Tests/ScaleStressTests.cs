@@ -39,8 +39,8 @@ namespace ProtoVerseApp.Tests
                 int span = spans[i % spans.Length];
 
                 entries.Add(new ProtoModRegistryEntry(
-                    id, revision, $"Synthetic module 0x{id:X4} rev {revision}",
-                    ManualReference: null, ControlScheme: "SyntheticViewModel", SlotSpan: span));
+                    Id: id, Revision: revision, Name: $"Synthetic module 0x{id:X4} rev {revision}",
+                    CircuitCode: $"S{id:X4}", ManualReference: null, ControlScheme: "SyntheticViewModel", SlotSpan: span));
             }
 
             return entries;

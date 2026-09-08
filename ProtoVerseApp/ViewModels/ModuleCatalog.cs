@@ -2,60 +2,76 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProtoVerseApp.Models;
+using ProtoVerseApp.Models.Registry;
 using ProtoVerseApp.Services;
 
 namespace ProtoVerseApp.ViewModels
 {
     /// <summary>
-    /// The single place that knows which ProtoMod types this build of the app can
-    /// render a dedicated panel for. MainViewModel never hardcodes a fixed lineup of
-    /// modules - it just asks this catalog to build whatever PresenceReport says is
-    /// actually plugged in. Supporting a new ProtoMod means adding one line here (plus
-    /// its panel view model/view/DataTemplate) - nothing about the slot-population
-    /// logic changes.
+    /// Which ProtoMod types this build of the app can render a dedicated panel for.
+    /// MainViewModel never hardcodes a fixed lineup of modules - it just asks this
+    /// catalog to build whatever PresenceReport says is actually plugged in.
+    ///
+    /// WHICH ID USES WHICH CONTROL SCHEME now lives in
+    /// <c>Models/Registry/ProtoModRegistry.json</c> (the single source of truth -
+    /// see <see cref="ProtoModRegistryService"/>), not here. This class is only the
+    /// other half a registry entry can't express in data: the actual panel
+    /// constructors, keyed by the <c>ControlScheme</c> string a registry entry
+    /// names. Adding a new ProtoMod that reuses an *existing* control scheme (e.g.
+    /// another Blinky-shaped board) is purely a registry row - nothing here
+    /// changes. Adding one with a genuinely new control scheme still means writing
+    /// that panel/ViewModel and registering its constructor below, which no amount
+    /// of data-driving removes - a real, new interaction needs real, new code
+    /// somewhere.
     /// </summary>
     public static class ModuleCatalog
     {
-        private static readonly Dictionary<ProtoModId, (string DisplayName, Func<FrameDispatcher, ModulePanelViewModelBase> Factory)> Registrations = new()
+        /// <summary>Registry entries whose <c>ControlScheme</c> is this value have no
+        /// software controls by design (every input is a switch/jumper on the
+        /// board) - see <see cref="PassiveModuleViewModel"/>. Not a factory
+        /// registration below, on purpose: a <see cref="ModulePanelViewModelBase"/>
+        /// (which exists to send and parse frames) would be the wrong shape
+        /// entirely for a board with no commands.</summary>
+        private const string PassiveControlScheme = "Passive";
+
+        private static readonly Dictionary<string, Func<FrameDispatcher, ModulePanelViewModelBase>> Factories = new()
         {
-            [ProtoModId.BlinkyLed] = ("Blinky LED", dispatcher => new BlinkyLedViewModel(dispatcher)),
-            [ProtoModId.AccelTemp] = ("Accelerometer + Temperature", dispatcher => new AccelTempViewModel(dispatcher)),
-            [ProtoModId.ElectronicLoad] = ("Electronic Load", dispatcher => new ElectronicLoadViewModel(dispatcher)),
+            ["BlinkyLedViewModel"] = dispatcher => new BlinkyLedViewModel(dispatcher),
+            ["AccelTempViewModel"] = dispatcher => new AccelTempViewModel(dispatcher),
+            ["ElectronicLoadViewModel"] = dispatcher => new ElectronicLoadViewModel(dispatcher),
         };
 
-        /// <summary>ProtoMod types that have no software controls *by design* - every
-        /// input is a switch or jumper on the board, so there is nothing to command and
-        /// never will be. These deliberately do NOT get a registration above: they have
-        /// no commands, so a <see cref="ModulePanelViewModelBase"/> (which exists to
-        /// send and parse frames) would be the wrong shape entirely.
-        ///
-        /// They are listed here rather than inferred, because "passive by design" and
-        /// "this build hasn't caught up yet" are indistinguishable from
-        /// <see cref="TryCreate"/> returning null - and they are opposite facts, only
-        /// one of which is a gap to close. See
-        /// <see cref="PassiveModuleViewModel"/>.</summary>
-        private static readonly Dictionary<ProtoModId, string> Passive = new()
-        {
-            [ProtoModId.BasicLed] = "Simple LED",
-        };
-
-        public static bool IsPassive(ProtoModId moduleId) => Passive.ContainsKey(moduleId);
+        public static bool IsPassive(ProtoModId moduleId) =>
+            ProtoModRegistryService.FindByIdAssumingDefaultRevision(moduleId)?.ControlScheme == PassiveControlScheme;
 
         /// <summary>Display name for a passive board, or null if it isn't one.</summary>
-        public static string? PassiveName(ProtoModId moduleId) =>
-            Passive.TryGetValue(moduleId, out var name) ? name : null;
+        public static string? PassiveName(ProtoModId moduleId)
+        {
+            var entry = ProtoModRegistryService.FindByIdAssumingDefaultRevision(moduleId);
+            return entry?.ControlScheme == PassiveControlScheme ? entry.Name : null;
+        }
 
         /// <summary>Builds the panel view model for a detected ProtoMod, or null if
         /// this build has no panel registered for that type yet. Also returns null for
         /// a passive board - check <see cref="IsPassive"/> to tell the two apart.</summary>
-        public static ModulePanelViewModelBase? TryCreate(ProtoModId moduleId, FrameDispatcher dispatcher) =>
-            Registrations.TryGetValue(moduleId, out var reg) ? reg.Factory(dispatcher) : null;
+        public static ModulePanelViewModelBase? TryCreate(ProtoModId moduleId, FrameDispatcher dispatcher)
+        {
+            var entry = ProtoModRegistryService.FindByIdAssumingDefaultRevision(moduleId);
+            if (entry == null || entry.ControlScheme == PassiveControlScheme)
+                return null;
+
+            return Factories.TryGetValue(entry.ControlScheme, out var factory) ? factory(dispatcher) : null;
+        }
 
         /// <summary>Every ProtoMod type this build can show a real panel for, with its
         /// display name - for the Help tab's "Currently supported ProtoMods" list.
-        /// Reads straight from the same registrations TryCreate uses, so it can never
-        /// drift out of sync with what's actually supported.</summary>
+        /// Derived from the same registry entries and the same Factories dictionary
+        /// TryCreate uses, so it can never drift out of sync with what's actually
+        /// supported.</summary>
         public static IReadOnlyList<(ProtoModId Id, string DisplayName)> SupportedModules =>
-            Registrations.Select(kvp => (kvp.Key, kvp.Value.DisplayName)).ToList();
+            ProtoModRegistryService.Entries
+                .Where(e => e.Revision == ProtoModRegistryService.DefaultRevision && Factories.ContainsKey(e.ControlScheme))
+                .Select(e => (e.ProtoModId, e.Name))
+                .ToList();
     }
 }

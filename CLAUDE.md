@@ -439,29 +439,63 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   A present `ProtoModId` this build has no panel for yet becomes an
   `UnknownModuleViewModel` (shown with an orange status dot) rather than
   crashing or being silently dropped. Its message leads with the module's
-  circuit code from `ProtoModBoardCatalog` (e.g. "Unsupported module:
-  BasicLed (circuit code F02)") rather than the raw hex `ProtoModId` — the
-  hex value means nothing to a person, the circuit code is what's actually
-  printed/programmed on the physical board. Falls back to the hex ID only if
-  a type is genuinely uncataloged on this side too. If asked to add a new
-  ProtoMod, the only new-module-specific code goes in `ModuleCatalog` plus
-  the panel itself — `MainViewModel` and the XAML shouldn't need to change.
+  circuit code (e.g. "Unsupported module: BasicLed (circuit code F02)")
+  rather than the raw hex `ProtoModId` — the hex value means nothing to a
+  person, the circuit code is what's actually printed/programmed on the
+  physical board. Falls back to the hex ID only if a type is genuinely
+  uncataloged on this side too.
+  **Single source of truth as of 2026-09-08:** `ModuleCatalog`,
+  `Models/Manual/ManualLibrary.cs`, and `Models/ProtoModBoardCatalog.cs` used
+  to be three independently hand-maintained `Dictionary<ProtoModId, ...>`s -
+  three places that could (and once did: an `AccelTemp`/F02 circuit-code
+  mixup, see below) silently disagree about one ProtoMod's identity. All
+  three are now thin views over `Models/Registry/ProtoModRegistry.json`
+  (loaded/validated once by `ProtoModRegistryService`), which is the one
+  place a ProtoMod's name, circuit code, manual reference, and control scheme
+  are authored. **Adding a ProtoMod that reuses an existing control
+  scheme or manual is now purely a registry row - no `ModuleCatalog` or
+  `ManualLibrary` code change at all.** A genuinely new control scheme still
+  means writing that panel/ViewModel and adding one line to
+  `ModuleCatalog.Factories` (keyed by the registry's `controlScheme` string,
+  not by `ProtoModId`) - real new UI still needs real new code, this only
+  removes the *identity* duplication, not panel authorship.
+  `ProtoModRegistryService.FindByIdAssumingDefaultRevision` is what every
+  current (revision-blind) call site uses; see EVALUATION.md on
+  `eval/long-term-scaling` for why "assuming default revision" is doing real
+  work in that name (revision isn't on the wire yet) and
+  `ProtoVerseApp.Tests/CrossCatalogConsistencyTests.cs` for the guardrail
+  keeping `ProtoModLibraryCatalog` (which stays separate - see below) honest
+  against it.
 - **A board that is passive by design is not "unsupported" — keep the two
   apart** (added 2026-09-01). Some ProtoMods have no software controls at all:
   every input is a switch or jumper on the board, so there is nothing for
   ProtoCore to command and never will be. Simple LED (`BasicLed`/F02) is the
-  first. These are listed in `ModuleCatalog.Passive` and render as
+  first. A registry entry whose `controlScheme` is the literal string
+  `"Passive"` (not a `ModuleCatalog.Factories` registration) renders as
   `PassiveModuleViewModel` — a green `SlotState.Occupied` dot and a message
   pointing at the board's own switches — rather than falling through to
   `UnknownModuleViewModel`'s orange dot and "isn't supported by this version
-  of the app yet". They deliberately get no `ModuleCatalog` registration:
-  they have no commands, so a `ModulePanelViewModelBase` (which exists to
-  send and parse frames) is the wrong shape. The distinction matters because
-  both cases look identical from `TryCreate` returning null while being
-  opposite facts — one is a gap to close, the other is finished — and it got
-  worse once manuals landed, since telling a learner the app doesn't support
-  their board directly above that board's manual is a bad first impression of
-  both. Add a passive board to that dictionary, not to `Registrations`.
+  of the app yet". They deliberately get no factory: they have no commands,
+  so a `ModulePanelViewModelBase` (which exists to send and parse frames) is
+  the wrong shape. The distinction matters because both cases look identical
+  from `TryCreate` returning null while being opposite facts — one is a gap
+  to close, the other is finished — and it got worse once manuals landed,
+  since telling a learner the app doesn't support their board directly above
+  that board's manual is a bad first impression of both. Mark a passive board
+  by giving its registry entry `"controlScheme": "Passive"`, not by adding it
+  to `ModuleCatalog.Factories`.
+- **`Models/ProtoModLibraryCatalog.cs` (the Library tab's rich catalog) is
+  deliberately NOT part of the identity registry above**, even though it
+  duplicates a `Code`/`ProtocolId` for every entry that has one. It carries
+  sourced editorial content (descriptions, project ideas, progression links,
+  each independently cited) that has nothing to do with wire identity, and it
+  covers real boards with no `ProtoModId` at all yet (A01, F00) - something a
+  registry keyed on a wire-level ID cannot represent by definition. Folding it
+  in would mean mangling cited prose to fit a data-only schema for no real
+  gain. Instead, `CrossCatalogConsistencyTests` checks the two agree wherever
+  they overlap (same circuit code for the same `ProtocolId`, in both
+  directions) - a test failure there is exactly the AccelTemp/F02 class of
+  bug, caught before it ships instead of after.
 - **Simulator mode** exists for developing/testing without hardware. `FrameDispatcher`
   talks to an `ISerialService` interface rather than `SerialService` directly, so it
   can point at either the real port or `MockSerialService` (swapped at runtime via

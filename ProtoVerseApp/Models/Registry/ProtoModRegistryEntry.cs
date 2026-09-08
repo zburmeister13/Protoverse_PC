@@ -23,8 +23,16 @@ namespace ProtoVerseApp.Models.Registry
     /// unordered on purpose - see <see cref="CompatibleWithRevision"/>. Required:
     /// an entry with no revision is a validation error (a registry that can't say
     /// which hardware revision it describes can't safely control anything), even
-    /// though every board shipped today happens to be a single revision.</param>
+    /// though every board shipped today happens to be a single revision. This is
+    /// the app's logical identity axis - a single string an entry is keyed on -
+    /// which is deliberately a simpler model than the EEPROM's own separate PCB/PCBA
+    /// revision sub-fields; see <paramref name="PcbRev"/>/<paramref name="PcbaRev"/>.</param>
     /// <param name="Name">Display name shown in the UI (Library, slot navigator).</param>
+    /// <param name="CircuitCode">Circuit code as printed on the board / burned into
+    /// its EEPROM, e.g. "F01" - was previously duplicated (and once drifted out of
+    /// sync - see the AccelTemp/F02 mixup in CLAUDE.md) between
+    /// <see cref="ProtoModBoardCatalog"/> and other per-module lookups. This
+    /// registry is now the one place it's authored.</param>
     /// <param name="ManualReference">Path/id of this revision's manual content, or
     /// null if none exists yet. A different revision can reference a different
     /// manual even when <see cref="CompatibleWithRevision"/> shares its control
@@ -48,14 +56,25 @@ namespace ProtoVerseApp.Models.Registry
     /// defaults to different module" hard constraint in EVALUATION.md). Must name a
     /// revision of the *same* <see cref="Id"/> - compatibility across different
     /// ProtoModId values is not a thing this registry models.</param>
+    /// <param name="PcbRev">Raw EEPROM PCB revision sub-field (e.g. "R1") - purely
+    /// informational today (nothing in the UI reads it, same as before this
+    /// registry existed), carried forward from <see cref="ProtoModBoardCatalog"/>
+    /// rather than dropped, since it is real hardware data. Not the same axis as
+    /// <paramref name="Revision"/> above and never assumed to move in lockstep with
+    /// it.</param>
+    /// <param name="PcbaRev">Raw EEPROM PCBA revision sub-field - same notes as
+    /// <paramref name="PcbRev"/>.</param>
     public record ProtoModRegistryEntry(
         [property: JsonPropertyName("id")] ushort Id,
         [property: JsonPropertyName("revision")] string Revision,
         [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("circuitCode")] string CircuitCode,
         [property: JsonPropertyName("manualReference")] string? ManualReference,
         [property: JsonPropertyName("controlScheme")] string ControlScheme,
         [property: JsonPropertyName("slotSpan")] int SlotSpan,
-        [property: JsonPropertyName("compatibleWithRevision")] string? CompatibleWithRevision = null)
+        [property: JsonPropertyName("compatibleWithRevision")] string? CompatibleWithRevision = null,
+        [property: JsonPropertyName("pcbRev")] string? PcbRev = null,
+        [property: JsonPropertyName("pcbaRev")] string? PcbaRev = null)
     {
         [JsonIgnore]
         public ProtoModId ProtoModId => (ProtoModId)Id;

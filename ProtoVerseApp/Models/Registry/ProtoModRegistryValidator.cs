@@ -52,6 +52,15 @@ namespace ProtoVerseApp.Models.Registry
                 if (string.IsNullOrWhiteSpace(entry.Name))
                     errors.Add($"Entry for {label} has no name.");
 
+                // The circuit code is the one identity fact a person can independently
+                // verify against a physical board (it's printed on the silkscreen) -
+                // this is the field that drifted out of sync between catalogs before
+                // this registry consolidated them (the AccelTemp/F02 mixup - see
+                // CLAUDE.md), so an entry claiming to be real hardware without one is
+                // rejected outright rather than left to drift again.
+                if (string.IsNullOrWhiteSpace(entry.CircuitCode))
+                    errors.Add($"Entry for {label} has no circuit code.");
+
                 if (string.IsNullOrWhiteSpace(entry.ControlScheme))
                     errors.Add($"Entry for {label} has no control scheme.");
 
