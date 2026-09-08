@@ -35,7 +35,7 @@ namespace ProtoVerseApp.ViewModels
         public string DisplayName { get; }
 
         /// <summary>Shown where a control panel would be. Deliberately points at the
-        /// board rather than apologising for the app.</summary>
+        /// board rather than apologizing for the app.</summary>
         public string Message { get; }
 
         public PassiveModuleViewModel(ProtoModId moduleId, string name)

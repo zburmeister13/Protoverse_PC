@@ -293,6 +293,70 @@ namespace ProtoVerseApp.Services
             Changed?.Invoke();
         }
 
+        /// <summary>This ProtoMod's aggregate rating across every profile on this
+        /// machine, and how many profiles contributed. Null average when nobody has
+        /// rated it.
+        ///
+        /// THE SCOPE IS LOCAL, and the UI must not imply otherwise. There is no server
+        /// here (see this class's doc comment), so "aggregate" means the profiles in
+        /// this one accounts.json - typically a handful on a shared classroom PC, often
+        /// exactly one. That is a genuinely useful number for a shared machine and a
+        /// misleading one if presented as a community score, which is why the count is
+        /// returned alongside rather than being optional: a "4.3" from one person and a
+        /// "4.3" from forty are different claims, and only showing the count keeps them
+        /// apart.</summary>
+        public (double? Average, int Count) GetAggregateRating(ProtoModId moduleId)
+        {
+            var ratings = _document.Accounts
+                .SelectMany(a => a.Modules)
+                .Where(m => m.ModuleId == (ushort)moduleId && m.Rating is >= 1 and <= 5)
+                .Select(m => m.Rating!.Value)
+                .ToList();
+
+            return ratings.Count == 0 ? (null, 0) : (ratings.Average(), ratings.Count);
+        }
+
+        /// <summary>The signed-in account's own rating, or null if they haven't rated
+        /// this ProtoMod (or nobody is signed in).</summary>
+        public int? GetMyRating(ProtoModId moduleId) => FindRecord(moduleId)?.Rating;
+
+        /// <summary>Sets the signed-in account's rating, 1-5. Passing null clears it,
+        /// so a rating can be taken back rather than only ever changed. No-ops when
+        /// signed out - a rating belongs to a person, and there is nobody to attribute
+        /// it to.</summary>
+        public void SetRating(ProtoModId moduleId, int? stars)
+        {
+            var account = ActiveAccount;
+            if (account == null)
+                return;
+
+            if (stars is < 1 or > 5)
+                stars = null;
+
+            var record = account.Modules.FirstOrDefault(m => m.ModuleId == (ushort)moduleId);
+            if (record == null)
+            {
+                // Rating a board you've never had plugged in is legitimate - the Library
+                // shows the whole catalog, not just what you own - so a record is created
+                // rather than the rating being dropped. FirstSeen/LastSeen stay unset,
+                // which is honest: this is not a sighting.
+                record = new ModuleRecord
+                {
+                    ModuleId = (ushort)moduleId,
+                    CircuitCode = ProtoModBoardCatalog.Entries.FirstOrDefault(e => e.Id == moduleId)?.CircuitCode,
+                };
+                account.Modules.Add(record);
+            }
+            else if (record.Rating == stars)
+            {
+                return;
+            }
+
+            record.Rating = stars;
+            Save();
+            Changed?.Invoke();
+        }
+
         /// <summary>Folds a pre-accounts <c>module-history.json</c> into an account, so
         /// upgrading doesn't silently lose what the app had already tracked. The old
         /// file is renamed rather than deleted - if the import goes wrong, the data is

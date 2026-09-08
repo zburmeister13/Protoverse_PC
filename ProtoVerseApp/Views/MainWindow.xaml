@@ -144,8 +144,58 @@
             </StackPanel>
         </Grid>
 
-        <TextBlock Grid.Row="1" Text="{Binding StatusMessage}" Margin="0,0,0,8"
-                    Foreground="{StaticResource TextSecondaryBrush}"/>
+        <StackPanel Grid.Row="1" Margin="0,0,0,8">
+            <TextBlock Text="{Binding StatusMessage}"
+                        Foreground="{StaticResource TextSecondaryBrush}"/>
+
+            <!-- Simulated bench: pick what's in each slot. Only ever visible in
+                 Simulator mode - against real hardware what's installed is a physical
+                 fact, not a setting. Swapping here goes through the same unsolicited
+                 PresenceReport path a real hot-swap uses, so it exercises the app's
+                 actual rebuild logic rather than a simulator-only shortcut. -->
+            <Border Margin="0,8,0,0" Padding="11,8" CornerRadius="5"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    DataContext="{Binding Simulator}"
+                    Visibility="{Binding IsVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="SIMULATED BOARDS" FontSize="9" FontWeight="Bold" Margin="0,0,14,0"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource AccentTealBrush}"/>
+                    <ItemsControl ItemsSource="{Binding Slots}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,14,0">
+                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center"
+                                               FontSize="11" Margin="0,0,6,0"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                    <!-- An explicit ItemTemplate rather than
+                                         DisplayMemberPath: App.xaml's ComboBox
+                                         ControlTemplate shows the selection via
+                                         SelectionBoxItemTemplate, which WPF only
+                                         populates from ItemTemplate here - with
+                                         DisplayMemberPath alone the closed combo fell
+                                         back to the item's ToString() and displayed the
+                                         raw record. -->
+                                    <ComboBox ItemsSource="{Binding DataContext.Options, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                              SelectedItem="{Binding Selected}"
+                                              MinWidth="215" FontSize="11">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Label}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
 
         <!--
             Main content area, as two top-level tabs:
@@ -185,9 +235,20 @@
             <DockPanel Grid.Column="0" Margin="0,0,12,0">
                 <TextBlock DockPanel.Dock="Top" Text="SLOTS" FontSize="10" FontWeight="Bold"
                            Margin="0,0,0,8" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <!-- No scroll bars in this column, ever. Disabling horizontal
+                     scrolling is also what makes the wrapping below work at all: a
+                     ListBox whose ScrollViewer permits horizontal scroll measures its
+                     items at infinite width, so TextWrapping never triggers and a long
+                     module name (e.g. "Accelerometer + Temperature") pushes a scroll
+                     bar in and clips itself instead. Vertical is off too - there are
+                     only ever SlotCount rows, so it can't overflow. The manual body
+                     column is the one that gives way when space is tight; this column
+                     and the manual's contents list keep their width. -->
                 <ListBox ItemsSource="{Binding Slots}" SelectedItem="{Binding SelectedSlot}"
                          Background="Transparent" BorderThickness="0"
-                         HorizontalContentAlignment="Stretch">
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Cursor" Value="Hand"/>
@@ -304,6 +365,11 @@
         </TabItem>
             <TabItem Header="Library">
                 <views:LibraryPanel DataContext="{Binding Library}"/>
+            </TabItem>
+            <!-- ProtoCore's own supply rails, not a ProtoMod's controls - hence a
+                 top-level tab rather than anything inside the slot workspace. -->
+            <TabItem Header="Rails">
+                <views:RailsPanel DataContext="{Binding RailsControl}"/>
             </TabItem>
         </TabControl>
 

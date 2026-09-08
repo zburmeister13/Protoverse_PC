@@ -52,8 +52,8 @@ namespace ProtoVerseApp.Models.Manual
                 Tagline: "Command a current and watch a real circuit obey - then find out why the board can't tell you whether it did.",
                 Difficulty: "Intermediate",
                 Time: "45-60 min",
-                Prerequisites: "Simple LED (F02)"),
-            SourceNote: "Written against the board's verified behaviour (CLAUDE.md, CHANGELOG 36-42, ElectronicLoadViewModel.cs). Electronic_Load_E02_Manual.docx was used as a reference for structure and tone, not for technical content - it describes a different, closed-loop design.",
+                Prerequisites: "None"),
+            SourceNote: "",
             Sections: new[]
             {
                 // ============================================================== 1
@@ -72,7 +72,7 @@ namespace ProtoVerseApp.Models.Manual
                     new ParagraphBlock(
                         "That last bullet is the one worth sitting with, and it is what this module is really about. Most instruments tell you what they measured. This one tells you what it was told to do. Learning to notice that difference - and knowing when it matters - is a habit that will outlast this board."),
                     new ImageBlock("E05_circuit.png",
-                        "The whole circuit. Click for the full schematic, with revision and title block."),
+                        "A section of the schematic. Click for the full schematic, with revision and title block."),
                 }),
 
                 // ============================================================== 2
@@ -257,9 +257,7 @@ namespace ProtoVerseApp.Models.Manual
                     new SubheadingBlock("Common misconceptions"),
                     new BulletsBlock(new[]
                     {
-                        "Reading the echoed current as a measurement. This is the central point of the module and it catches experienced engineers too - the number looks like telemetry because it arrives from the hardware.",
-                        "Believing the board enforces its own 300 mA limit. It does not. Ask for 400 mA and it answers 400 mA at 100% duty, exactly as if nothing were wrong - which is precisely why the echo is worth distrusting.",
-                        "Expecting the load to push current into a source. It only sinks; it can pull current out of a source, never supply it.",
+                        "Expecting the load to push current into a source. It only sinks; it can pull current out of a source, never supply it - in this configuration.",
                         "Assuming the reported duty is wrong because it doesn't match the textbook formula. The calibration overshoot is deliberate and documented.",
                     }),
                     new SubheadingBlock("Answers"),

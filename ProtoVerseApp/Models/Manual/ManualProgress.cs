@@ -20,7 +20,7 @@ namespace ProtoVerseApp.Models.Manual
     /// per module and is already persisted by `Services/AccountStore` to
     /// %AppData%\ProtoVerse\accounts.json. Adding `ManualProgress? ManualProgress` to
     /// that record is the whole storage story - no new file, no new lifecycle, and it
-    /// inherits the account switching, the sign-out behaviour, and the
+    /// inherits the account switching, the sign-out behavior, and the
     /// degrade-to-nothing-on-IO-error handling that store already has.
     ///
     /// WHY KEYED BY STRING: every id here (<see cref="ManualSection.Id"/>,

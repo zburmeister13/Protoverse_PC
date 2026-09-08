@@ -96,7 +96,7 @@ namespace ProtoVerseApp.Models.Manual
                         "An LED - light-emitting diode - is a component that glows when current flows through it in one particular direction. Think of it as a one-way street: current flowing the right way produces light, and the wrong way, nothing happens at all."),
                     new ParagraphBlock(
                         "An LED also has a threshold, called its forward voltage. Below that, almost nothing flows and the LED stays dark no matter how patient you are. Cross it, and current climbs fast. The green LEDs on this board have a forward voltage of about 2 volts."),
-                    new FigureBlock("LED schematic symbol and physical package, anode and cathode labelled"),
+                    new FigureBlock("LED schematic symbol and physical package, anode and cathode labeled"),
 
                     new SubheadingBlock("Why there is a resistor next to every LED"),
                     new ParagraphBlock(
@@ -149,7 +149,7 @@ namespace ProtoVerseApp.Models.Manual
                             Observe: "One LED on the physical board lights up. Is there any delay you can perceive between the click and the light, or does it look instantaneous?"),
                         new ManualStep(
                             "Click the same circle again to turn it back off.",
-                            Observe: "You have now driven one pin HIGH and then LOW. That pair of actions is the entire foundation of digital electronics - everything else is this, repeated and organised."),
+                            Observe: "You have now driven one pin HIGH and then LOW. That pair of actions is the entire foundation of digital electronics - everything else is this, repeated and organized."),
                         new ManualStep(
                             "Turn each of the other three on and off in turn, one at a time.",
                             Observe: "Does each circle control the LED you expect? Compare the order on screen against the order of the lights on the board - they may or may not run the same way round, and it is worth knowing which."),

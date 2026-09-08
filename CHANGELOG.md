@@ -2261,7 +2261,7 @@ removes the gate and shows Appendix A; a TOC click scrolls the target section
 from y=658 to y=126; a slot with no manual shows the explanatory placeholder.
 
 **Not verified: appearance** - same blank-capture limitation as entries 43-46.
-The layout is verified structurally and behaviourally; nobody has looked at
+The layout is verified structurally and behaviorally; nobody has looked at
 it. Whether the manual is genuinely readable at this width is unassessed.
 
 ---
@@ -2478,8 +2478,8 @@ EVALUATION.md cites it as the mitigation for a real rollout risk.
   left bar and full-strength text.
 - `Views/ManualView.xaml.cs` - scroll-spy. On `ScrollChanged`, the last
   section heading to have passed the top of the viewport becomes the selected
-  one. A `_syncing` guard stops the existing click-to-scroll behaviour and the
-  new scroll-to-select behaviour from retriggering each other, which would
+  one. A `_syncing` guard stops the existing click-to-scroll behavior and the
+  new scroll-to-select behavior from retriggering each other, which would
   otherwise have made the manual fight the mouse wheel.
 - `Views/LibraryPanel.xaml` - the "Try this" section and its idea template
   removed; cards are meaningfully shorter.
@@ -2526,7 +2526,7 @@ not the cropped one, now and in future. (2) Show a snapshot of the circuit as
 a built-in image in the Overview, without cutting off any symbol info the way
 the cropped E05 PDF did. (3) Delete the "Circuit only - no border or title
 block" caption next to the link. (4) Delete the provenance block ("Written
-against the board's verified behaviour (CLAUDE.md...)") - not appropriate to
+against the board's verified behavior (CLAUDE.md...)") - not appropriate to
 show in the product. (5) Delete the assembly steps, which make no sense
 because they must already be done for the manual to be reachable, and the
 Observe block about the app auto-identifying on connect. (6) Delete the
@@ -2540,8 +2540,8 @@ Observe block about the app auto-identifying on connect. (6) Delete the
   verbatim with border and title block intact, and `{CODE}_circuit.png`, a
   cropped raster of just the circuit for the inline image. The PDF crop is
   gone entirely - the link wants the whole drawing.
-- The PNG is rasterised with **headless Microsoft Edge**, since there is no SVG
-  rasteriser, PDF tool or Python on this machine and kicad-cli has no PNG
+- The PNG is rasterized with **headless Microsoft Edge**, since there is no SVG
+  rasterizer, PDF tool or Python on this machine and kicad-cli has no PNG
   export. Edge is on every Windows box.
 - `Models/Manual/ManualBlocks.cs` - new `ImageBlock`, with an `Exists` check so
   a missing asset renders nothing rather than a broken-image box.
@@ -2611,7 +2611,7 @@ inspected directly and shows every designator, value and pin name intact.
 choice, to simplify how answers are checked. (2) "If I command 400mA the board
 definitely responds with 400mA and 100% duty cycle unlike what the ceiling
 behavior that is described. I like what is described but that's not what
-happens." (3) The schematic image shouldn't use KiCad's colours - keep it black
+happens." (3) The schematic image shouldn't use KiCad's colors - keep it black
 and white, preferably a black background with white graphics, inverting if need
 be.
 
@@ -2671,7 +2671,7 @@ the one figure in the manual from being a bright rectangle in a dark app.
   ~290px tall and downscaling from higher keeps hairline wires legible.
 - `Views/ManualView.xaml` - the image card is black instead of white, so the
   figure has no visible seam where the PNG's own background ends.
-- The linked PDF is untouched and still in full colour. That is the reference
+- The linked PDF is untouched and still in full color. That is the reference
   drawing and it opens in its own viewer, where KiCad's palette is at home.
 
 **Verification.** UI Automation, Simulator mode. Templated option buttons expose
@@ -2726,7 +2726,7 @@ The entry also flags which of E05's choices are hardware-specific rather than
 template rules — it has no chart because that board revision can measure
 nothing — so they don't get copied forward as conventions.
 
-**Related, still open:** E05's manual asserts the disputed >300 mA behaviour
+**Related, still open:** E05's manual asserts the disputed >300 mA behavior
 (400 mA accepted, duty 100%) in about six places. See entry 52 and the
 Electronic Load section of `CLAUDE.md`; the topic is parked at the user's
 direction and the content is unchanged pending a real capture.
@@ -2763,7 +2763,7 @@ than guessed:**
   both of which firmware already ships as selectable patterns, so quoting it
   unchanged would ask someone to build what a dropdown already does. Reworked
   into predict-then-check against the built-in patterns (predict Chase's
-  direction and end behaviour, then Bounce's full six-step sequence, before
+  direction and end behavior, then Bounce's full six-step sequence, before
   selecting either), keeping the 4-bit binary counter as the hands-on build
   because firmware genuinely doesn't do that one and it works by clicking the
   four LED toggles.
@@ -2844,7 +2844,7 @@ first, neither of which E05 or F01 had exposed.
 - `ViewModels/PassiveModuleViewModel.cs` (new) — for boards with no software
   controls *by design*. Reports `SlotState.Occupied` (green, like any working
   module, because that is the truth) and a message pointing at the board's own
-  switches instead of apologising for the app.
+  switches instead of apologizing for the app.
 - `ViewModels/ModuleCatalog.cs` — a `Passive` dictionary alongside
   `Registrations`, with `IsPassive`/`PassiveName`. Passive boards deliberately get
   no registration: they have no commands, so a `ModulePanelViewModelBase` — which
@@ -3311,3 +3311,367 @@ for this doc):**
 **Also:** everything currently on `feature/protomod-single-source-of-truth`
 (this doc plus entries 61-62's work) pushed to the remote per the user's
 request, for a PR into `main` later the same evening.
+
+---
+
+### 57. Voltage rail control: premise checked, hardware established, contract proposed
+
+**2026-09-07, 15:20 CDT**
+
+**Prompt:** "Voltage rail control tab. New tab exposing discrete ProtoCore
+voltage rail control. The firmware capability already exists - this is app-side
+UI/coordination work, not new firmware. Work with firmware agent if necessary!"
+
+**Purpose:** Build the tab. No code was written, because the stated premise
+turned out to be wrong and the honest thing was to establish that first.
+
+**The premise is wrong.** The firmware session (checked against source, not
+memory) confirmed rail control does not exist on the wire at all. What exists is
+a standalone `power_expander.c` driver - implemented, compiled, bench-flashed,
+and completely inert, because nothing calls it. `PROTO_ID_CORE` (0xFFF0) is only
+ever a *sender* id on outgoing PresenceReports and isn't in `PROTOMOD_REGISTRY`,
+so a Command addressed to it returns `PROTOCOL_ERR_NOT_PRESENT`. No MsgType, no
+sub-command layout, no response format, no fault reporting. Both sides start
+from zero, and this is firmware work plus a shared contract, not app-side
+wiring.
+
+**Hardware facts established from `PC01_ProtoCore/ProtoCore/*.kicad_sch`**, all
+now recorded in `CLAUDE.md`. The firmware session explicitly declined to guess
+at these, correctly, so this side answered them:
+- Six switchable rails on a PCF8574A (P0-P5), on/off only. `BUCK_VAR` is
+  adjustable *as a part*, not at runtime.
+- 3.3 V, 4.5 V and 5 V are not switchable. 3V3_BUCK powers the MCU, the ID
+  muxes, the ProtoMod EEPROMs and the expander itself - so **switching any of
+  the six rails cannot break presence detection**, which was the firmware
+  session's blocking question.
+- `BUCK_VAR` is a genuine ninth rail, not an alias for one of the eight nominal
+  voltages, and it does reach the module slots.
+- The power tree is two-stage (4V5 -> {1V4, 3V1, 3V3, VAR}; 3V1 -> 1V8; 1V8 ->
+  {1V0, 1V2}). First read off a render and flagged as unverified; then settled
+  properly by exporting a kicadxml netlist and walking the node lists, which
+  was necessary because every regulator input runs through a 2-pin link whose
+  far side the render does not show. Confirmed: the 1V0/1V2 LDOs hang off
+  1V8_BUCK, not 3V1, so firmware's existing interlock IS incomplete.
+- The PCF8574A output pins map to the rails in exactly firmware's enum order,
+  so rail ids 0-5 are safe to freeze.
+- NEW, found by the same trace and previously unknown to either side: the
+  expander does not drive the regulator enables directly. Each rail runs
+  through a link (J18/J22/J26/J19/J23/J27). If one is not fitted, the expander
+  is disconnected and the pull-down holds that rail off permanently while the
+  firmware shadow reports it on. With no PGOOD that is a second
+  software-undetectable failure mode, so first bring-up needs a meter.
+
+**PGOOD is a trap, and the user closed it.** The schematic has `*_PGOOD` nets on
+four rails, and this session proposed building the whole design around them - a
+response carrying commanded *and* actual state, so the tab could show the
+difference. The user: "PGOOD is not available at the HW version to the MCU. It's
+simply the name of a net on the schematic. There is no closed loop." So rail
+state is a commanded shadow only, and the pull-down-vs-weak-pull-up risk
+firmware flags in its own header is **undetectable in software** on this
+revision. Recorded prominently in `CLAUDE.md`, because reading the schematic
+alone leads straight back to the wrong conclusion.
+
+**Contract proposed cross-session, not yet agreed:** Core-addressed Command,
+`payload[0]` sub-command (`0x01` SetRail, `0x02` GetRails), rail ids from
+firmware's existing enum order, and a full-state snapshot response of
+`[rail_count, one byte per rail]` returned by every sub-command. Fixed array
+with an explicit count rather than a packed bit mask, deliberately - the same
+lesson `PresenceReport` taught this project when a variable encoding made two
+different physical situations produce identical bytes. Plus one new error code
+for interlock refusals.
+
+**Changes:** `CLAUDE.md` and this entry only. No app code - the user chose to
+agree the contract jointly before either side implements, so writing a codec now
+would be inventing half of a shared format.
+
+**Outcome, same day, 16:10 CDT — the trace found a real firmware bug.** The
+firmware session's user independently confirmed the power tree, matching the
+netlist trace exactly. On that basis the firmware session **fixed
+`power_expander.c`**: the old single `3V1 -> {1V8, 1V0, 1V2}` mask was replaced
+with a proper two-level parent chain that walks upward enabling every ancestor
+that isn't already on, and refuses a disable while anything naming that rail as
+a direct parent is still enabled. Disabling 1V8 while an LDO was on had not been
+checked at all before. It is a dormant-code fix - nothing calls the driver yet,
+so no reflash - but it means the interlock this app would warn against is now
+correct at the source. The jumper finding was folded into `power_expander.h` as
+a second documented silent-off failure mode alongside the pull-up/pull-down note.
+
+So the tab still doesn't exist and the contract is still parked pending the
+firmware side's greenlight, but the investigation was not wasted: it corrected a
+real defect in already-written code, confirmed the rail ids are safe to freeze,
+and documented two failure modes that no software on this hardware revision can
+detect.
+
+---
+
+### 58. Rails tab: discrete ProtoCore voltage rail control, both sides implemented
+
+**2026-09-07, 17:45 CDT**
+
+**Prompt:** "don't worry about the jumpers. the HW will be configured as needed.
+Implement all of this on the app side and coordinate with the firmware to
+implement on their side as well."
+
+**Purpose:** Ship the feature investigated in entry 57, now that both users have
+greenlit it.
+
+**Contract, agreed cross-session and implemented on both sides:**
+- Addressed to `ProtoModId.Core` (0xFFF0) with the existing `MsgType.Command` -
+  no new MsgType. Firmware added a Core intercept in `handle_command()`, since
+  0xFFF0 is not and never will be a `PROTOMOD_REGISTRY` entry.
+- `payload[0]`: `0x01` SetRail (`payload[1]` = rail id, `payload[2]` = 0/1),
+  `0x02` GetRails.
+- Every sub-command replies with the same snapshot: `[rail_count, one byte per
+  rail]`, 7 bytes today. Firmware confirmed it reflects the **full resulting
+  state**, including ancestors auto-enabled on the way up - which is what makes
+  the UI's "this will also switch on..." wording safe to show.
+- New error `0x06 PROTOCOL_ERR_DEPENDENCY` for an interlock refusal.
+- Fixed array with an explicit count rather than a packed bit mask, deliberately.
+  Same reasoning as `PresenceReport`, where a packed encoding once let two
+  different physical situations produce identical bytes.
+
+**Three UI decisions taken with the user:**
+- **The variable buck shows no voltage.** Its output is trimmed by feedback
+  resistors and nobody has said what it's set to, so it reads "Variable" rather
+  than carrying a number derived from a datasheet figure taken on trust. Pinned
+  by a test.
+- **Explain before, report after.** Controls stay live; a row says what a click
+  is about to switch on, and a refusal is reported with the reason the device
+  gave. The app mirrors the supply tree for explanation only - firmware stays the
+  authority, so the two can't silently disagree about what is legal.
+- **Unsupported firmware says so.** `NOT_PRESENT` is detected specifically and
+  rendered as "this ProtoCore's firmware doesn't support rail control yet",
+  rather than showing toggles that quietly do nothing. This project has lost a
+  day to exactly that ambiguity before.
+
+**Changes:**
+- `Models/VoltageRail.cs` (new) - `RailId`, the rail catalog with the supply tree
+  from the netlist trace, and the wire vocabulary.
+- `ViewModels/RailsViewModel.cs` (new) - device-echo-only state, cascade
+  explanations, refusal reporting, unsupported-firmware detection.
+- `Views/RailsPanel.xaml`/`.cs` (new), `Views/MainWindow.xaml` - third top-level
+  tab beside Slots and Library. Buttons rather than checkboxes on purpose: a
+  checkbox flips itself on click, which would be a local guess, and here that
+  guess is wrong more often than usual because one click can change three rails.
+- `Services/MockSerialService.cs` - simulated rails including the interlocks, so
+  the tab is fully exercisable without hardware. Starts all-off, matching what
+  real hardware does at power-up.
+- `Models/FrameInterpreter.cs` - Traffic Log decoding for SetRail, GetRails, the
+  rail snapshot (by rail name) and the new dependency error.
+- `ViewModels/HelpViewModel.cs` - end-user revision note.
+- `ProtoVerseApp.Tests/VoltageRailTests.cs` (new) - 12 tests pinning the rail
+  ids, the wire bytes, the supply tree, the no-invented-voltage rule, and the
+  Traffic Log decoders including a truncated-payload case.
+
+**Handling a gap firmware flagged.** If the I2C write to the expander fails
+(a bus fault rather than a rejected request), there is no wire error for it -
+firmware replies with the true, unchanged state, which is the honest thing to do
+but makes a failed write look identical to nothing happening. `RailsViewModel`
+records what each SetRail asked for and compares it against the reply, reporting
+the mismatch. That's the only way to tell the two apart from this side.
+
+**A bug found by testing rather than by reading.** The first UI run showed the
+interlock refusal working (3.1 V correctly refused to switch off while the 1.0 V
+LDO ran from it) but *no message explaining why*. Cause: `HandleError` set the
+explanation and then re-synced, and the arriving snapshot cleared it - so the
+rail correctly refused to move and the UI said nothing. `LastError` now persists
+until the user's next action.
+
+**Verification.** 41 tests pass (29 pre-existing, 12 new). UI Automation in
+Simulator mode: all six rails listed with the variable buck showing no invented
+voltage; the commanded-not-measured notice present; six rails off at connect;
+the cascade note reads "Turning this on will also switch on 1.8 V buck and 3.1 V
+buck"; clicking the 1.0 V rail turns on exactly three rails; the blocking notes
+appear on both parents; switching off 3.1 V is refused, the rail stays on, and
+the reason is shown. Traffic Log rendering was *not* visually confirmed this run
+- screen capture was unavailable (invalid desktop handle, screen locked) - so
+the decoders are covered by unit tests instead, which is the stronger check for
+correctness anyway.
+
+**Firmware side is built but not yet flashed**, so against a real board the tab
+will currently report that the firmware doesn't support rail control. That is the
+intended behavior for that case, not a defect.
+
+---
+
+### 59. Rail control confirmed on real hardware, and a regression that blocked connecting to it
+
+**2026-09-07, 18:30 CDT**
+
+**Prompt:** continuation of entry 58 - the firmware session flashed and verified
+the rail-control build on the bench board and asked for a first-connect report.
+
+**A regression found on the way, which mattered more than the feature test.**
+Connecting to the real board reported "No port selected" no matter which port was
+picked. Cause: `RefreshPorts()` calls `AvailablePorts.Clear()`, and clearing the
+collection makes the ComboBox push `null` back through its `SelectedItem` binding
+into `SelectedPort`. `ToggleConnection` refreshes *immediately before* checking
+that value, so the check always saw null. **Real hardware could not be connected
+to at all** - not an edge case, the only path.
+
+It came in with the merged Connect/Refresh button (entry from the pulled
+`feature/protomod-control-lock` work). The irony is that refreshing before
+connecting exists to handle a board re-enumerating under a different COM number -
+which is exactly what had just happened here - but the implementation broke the
+thing it was protecting. Fixed by capturing the selection before the clear and
+restoring it if the port is still present; a port that has genuinely gone away is
+deliberately *not* restored, so the user is told rather than silently connected to
+the wrong thing.
+
+**The re-enumeration is worth noting too:** before the flash the board was COM3
+(COM4 a stale phantom); after the reset that followed `download-verify` they had
+swapped - the board came back as COM4 and COM3 became the phantom. The hardware
+check script now finds the port by USB VID/PID (`VID_0483&PID_5740`, status OK)
+rather than hardcoding a number.
+
+**Rail control on real hardware - first connect, read-only.** Deliberately no
+rails were switched: that is the user's bench and no go-ahead had been given, and
+`GetRails` changes nothing physically, so the transition could be confirmed
+without touching a single rail.
+
+- Board connected, 2 ProtoMods detected.
+- The "this ProtoCore's firmware doesn't support rail control yet" notice is
+  **gone** - the exact transition being tested, since before the flash that was
+  what the tab correctly showed.
+- All six rails render, and all six read **off**. Initially reported here as
+  merely consistent with a fresh reset; the firmware session then confirmed it is
+  *designed* - `PowerExpander_Init()` unconditionally writes the shadow to 0x00 at
+  boot, because the driver does not trust the PCF8574A's power-on output state.
+  So the inverse is now a real test: a rail showing on at a fresh connect would be
+  a defect.
+- No errors, no malformed-payload complaints, no mismatch between commanded and
+  reported state.
+
+**Still not verified, and only a person at the bench can do it:** whether a rail
+that reads on is *actually* on (no PGOOD, so software cannot tell), and whether
+the 3.1 V-while-1.0 V-is-on refusal behaves on real hardware the way the simulator
+does.
+
+**Changes:** `ViewModels/MainViewModel.cs` (the `RefreshPorts` fix),
+`CHANGELOG.md`, `CLAUDE.md`.
+
+---
+
+### 60. Fix a broken build: app icon was a JPEG named .ico
+
+**2026-09-07, 23:55 CDT**
+
+**Prompt:** "continue if necessary" - found while running a routine build and
+test pass after entry 59.
+
+**The solution stopped building.** `CSC : error CS7065: Error building Win32
+resources -- Icon stream is not in the expected format`. Cause:
+`ProtoVerseApp/Assets/AppIcon.ico` had been replaced with a **JPEG** - the file
+began `FF D8 FF E0 ... JFIF` rather than an ICO header. New artwork (the
+ProtoVerse orbit mark on a dark navy starfield, 819x705) had been saved straight
+over the `.ico` with the extension unchanged. `<ApplicationIcon>` rejects that
+outright, so nothing in the solution compiled.
+
+Not touched by this session, and surfaced rather than silently reverted - the
+artwork was clearly deliberate, and the background treatment is a settled brand
+decision (the previous icon was chroma-keyed transparent). Asked rather than
+assumed.
+
+**User's choice: convert it and keep the starfield**, deliberately reversing the
+earlier transparent treatment.
+
+**Changes:**
+- `Assets/AppIcon_source.jpg` (new) - the original artwork, preserved before
+  overwriting, so the `.ico` can be regenerated rather than hand-edited. That's
+  the same rule the previous icon followed.
+- `Assets/AppIcon.ico` - rebuilt as a real multi-resolution ICO (16/32/48/256),
+  center-cropped from 819x705 to a 705x705 square (the mark is already centered,
+  so cropping beats padding), each frame PNG-compressed. Written as a proper ICO
+  container by hand: header, one 16-byte directory entry per size, then the
+  frames; 256px must be PNG, and 256 is encoded as 0 in the width/height bytes.
+- `CLAUDE.md` - records that the background is now intentionally kept, so a
+  future session doesn't "restore" transparency thinking it regressed, plus the
+  JPEG-renamed-to-.ico trap and how to verify a conversion.
+
+**Verification.** Header reads `00 00 01 00`; `System.Drawing.Icon` parses the
+file; the solution builds clean; 41 tests pass; and the icon extracts back out of
+the built `.exe`. Confirmed visually in the running app's title bar, which is a
+live render rather than the shell's cached copy - it shows the navy tile with the
+orbit mark. The taskbar may still show the old icon until the icon cache is
+cleared (see CLAUDE.md); that is a shell caching artifact, not a build problem.
+
+---
+
+### 61. Six requested features: US spelling, no side-column scroll bars, simulator board swapping, answer export, ratings, cheat sheets
+
+**2026-09-08, 09:10 CDT**
+
+**Prompt:** six numbered requests - American English spelling throughout; remove
+horizontal scrolling from the slots and contents columns without ever
+compromising their size; simulator ability to switch between any supported
+ProtoMod; PDF export of a learner's manual answers alongside the correct answers;
+ProtoMod ratings with an aggregate score in the Library; and a per-ProtoMod cheat
+sheet of Tech Note formulas and Key Takeaways.
+
+**1. American English.** Swept every `.cs`, `.xaml`, `.md` and `.ps1`:
+behaviour/colour/recognise/realised/organised/labelled/rasterise/grey/centre and
+their inflections. Checked the matches first rather than blind-replacing -
+"optimism", "realistic" and "analysis" are correct in American English and would
+have been mangled by a naive pattern.
+
+**2. No scroll bars in the first two columns.** Both columns were already fixed
+width, so the fix was `ScrollViewer.HorizontalScrollBarVisibility="Disabled"` on
+the slots list and the manual contents list. That is also what makes the existing
+`TextWrapping` work at all: a ListBox whose ScrollViewer permits horizontal
+scrolling measures its items at infinite width, so wrapping never triggers and a
+long name (e.g. "Accelerometer + Temperature") clips itself behind a scroll bar
+instead. Vertical is disabled too - neither list can overflow. The manual body
+column keeps its own scroll bar and gives way when space is tight, as instructed.
+
+**3. Simulator board swapping.** `MockSerialService.InstalledMods` became
+per-instance and settable; `SetInstalledMods` volunteers a fresh PresenceReport
+exactly as firmware does on a hot-swap, so swapping exercises the app's real
+rebuild path rather than a simulator-only shortcut. The picker offers every board
+in the registry (so a ProtoMod added there appears automatically), plus empty,
+plus the two degraded cases - an unrecognized EEPROM and a valid id this build has
+no panel for - which were previously reachable only by editing the mock and
+rebuilding.
+
+**4. Answer export.** `Services/ManualPdfExporter.cs` builds an HTML document from
+the learner's actual in-app answers and prints it via headless Edge. No PDF
+dependency was added: Chromium's print-to-PDF is already a proven tool in this
+repo. The sheet carries the learner's name, the date, an answered/total summary,
+each free-text answer, each multiple-choice answer marked correct or not, and the
+correct answer with its explanation. Unanswered questions say "Not answered"
+rather than being blank, so a marker can tell a skipped question from a lost one.
+Correct answers are included deliberately: the app already reveals them on
+answering, so nothing is leaked, and it makes the sheet markable at a glance.
+
+**5. Ratings.** `ModuleRecord.Rating` (1-5, null when unrated - null rather than 0
+so "not rated" doesn't drag the average down), `AccountStore.SetRating` /
+`GetMyRating` / `GetAggregateRating`, five clickable stars per Library card, and
+the aggregate shown as e.g. "4.3 * (3 ratings)". **The count is always shown
+next to the average, on purpose:** there is no server here, so "aggregate" means
+the profiles in this machine's accounts.json - often exactly one. A 4.3 from one
+rater and a 4.3 from forty are different claims, and only the count keeps them
+apart. The tooltip says the scope outright.
+
+**6. Cheat sheets.** `Models/Manual/CheatSheet.cs` derives a one-page reference
+from the manual - every `TechNote` callout and every "Key takeaways" bullet list,
+excluding appendices. Derived rather than authored separately on purpose: a
+hand-written second copy of the same technical claims is a copy that drifts, and a
+drifting copy is exactly what the no-fabrication rule exists to prevent. Opens in
+its own window so it can sit beside the app during work.
+
+**A bug found by looking at the result.** The simulator's board pickers rendered
+their selection as the raw record (`SimulatedBoardOption { Id = BlinkyLed, ... }`)
+instead of the label. `DisplayMemberPath` is not honored by App.xaml's custom
+ComboBox `ControlTemplate`, which shows the selection through
+`SelectionBoxItemTemplate` - WPF only populates that from `ItemTemplate`. Replaced
+with an explicit `ItemTemplate`. Worth noting for any future ComboBox in this app.
+
+**Verification.** Build clean; 46 tests pass (41 before, 5 new covering the cheat
+sheet extraction, its empty case, appendix exclusion, a real PDF render, and the
+unwritable-path failure path). UI Automation in Simulator mode confirms: the
+simulated-boards row appears and swapping slot 2 to Simple LED updates the slot
+live; exactly one scroll bar remains in the window and it belongs to the manual
+body, not to either side column; both new manual buttons are present; no British
+spellings in any visible text; rating labels and stars render on every Library
+card. The exported sheet was rendered and inspected directly - it shows a correct
+answer, a wrong answer, and two unanswered questions, each distinguishable at a
+glance.

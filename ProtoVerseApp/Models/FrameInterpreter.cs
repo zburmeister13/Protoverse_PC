@@ -30,6 +30,9 @@ namespace ProtoVerseApp.Models
         private const byte ErrBadPayloadLen = 0x03;
         private const byte ErrNotImplemented = 0x04;
         private const byte ErrBadValue = 0x05;
+        /// <summary>Added 2026-09-07 with rail control; agreed cross-session and
+        /// present in firmware's protocol.h as PROTOCOL_ERR_DEPENDENCY.</summary>
+        private const byte ErrDependency = 0x06;
 
         private const byte BlinkyCmdSetState = 0x01;
         private const byte BlinkyCmdSetBlinkRateMs = 0x02;
@@ -63,6 +66,7 @@ namespace ProtoVerseApp.Models
                 ErrBadPayloadLen => "PROTOCOL_ERR_BAD_PAYLOAD_LEN",
                 ErrNotImplemented => "PROTOCOL_ERR_NOT_IMPLEMENTED",
                 ErrBadValue => "PROTOCOL_ERR_BAD_VALUE",
+                ErrDependency => "PROTOCOL_ERR_DEPENDENCY",
                 _ => null
             };
             return name is null
@@ -114,12 +118,43 @@ namespace ProtoVerseApp.Models
                 if (subCommand == LoadCmdSetCurrentLimitMa && frame.Payload.Length >= 3)
                     return $"SetCurrentLimitMa: {ReadUInt16LE(frame.Payload, 1)} mA";
             }
+            else if (frame.ModuleId == ProtoModId.Core)
+            {
+                // ProtoCore's own supply rails - see VoltageRailCatalog.
+                switch (subCommand)
+                {
+                    case VoltageRailCatalog.CmdGetRails:
+                        return "GetRails: read all rail states";
+                    case VoltageRailCatalog.CmdSetRail when frame.Payload.Length >= 3:
+                        var rail = VoltageRailCatalog.Find((RailId)frame.Payload[1]);
+                        var railName = rail?.Name ?? $"rail 0x{frame.Payload[1]:X2} (unknown)";
+                        return $"SetRail: {railName} {(frame.Payload[2] != 0 ? "on" : "off")}";
+                }
+            }
 
             return $"Command sub-code 0x{subCommand:X2} ({frame.Payload.Length} byte(s))";
         }
 
         private static string DescribeResponse(ProtocolFrame frame)
         {
+            // Rail snapshot: [rail_count, one byte per rail]. Named rather than shown
+            // as raw indices, since "3V1 on" is the thing a reader actually wants.
+            if (frame.ModuleId == ProtoModId.Core && frame.Payload.Length >= 1)
+            {
+                int railCount = frame.Payload[0];
+                if (railCount > 0 && frame.Payload.Length >= railCount + 1)
+                {
+                    var sb = new StringBuilder("Rails: ");
+                    for (int i = 0; i < railCount; i++)
+                    {
+                        if (i > 0) sb.Append(", ");
+                        var rail = VoltageRailCatalog.Find((RailId)i);
+                        sb.Append($"{rail?.Name ?? $"rail {i}"}={(frame.Payload[i + 1] != 0 ? "on" : "off")}");
+                    }
+                    return sb.ToString();
+                }
+            }
+
             if (frame.ModuleId == ProtoModId.BlinkyLed && frame.Payload.Length >= 7)
             {
                 bool enabled = frame.Payload[0] != 0;

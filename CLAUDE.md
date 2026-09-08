@@ -357,7 +357,7 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   keeps climbing, so the readout and the circuit silently stop agreeing.
   E05's in-app manual now teaches exactly that (CHANGELOG entry 52). If a
   firmware fix ever lands that does reject >300mA, that manual content has
-  to change with it — it is written against the current behaviour.
+  to change with it — it is written against the current behavior.
   Response is a 3-byte `[current_ma_lo, current_ma_hi, duty_percent]` — an
   echo of the commanded current (not a measurement) plus the PWM duty cycle
   firmware is actually driving. `ElectronicLoadViewModel` was originally
@@ -547,8 +547,18 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   (`POR/PDR`, a supply brownout from physical board insertion) can't be
   triggered over SWD; there's no remaining synthetic-repro path on either
   side. Don't re-attempt an SWD/NRST-based repro — this needs the user to
-  watch a real reinsertion happen live, which is also the only way to learn
-  whether Windows keeps the same COM port number across the reset.
+  watch a real reinsertion happen live.
+  **Partially superseded 2026-09-07 — a full flash cycle is not the same as an
+  NRST pulse.** The "zero flicker" result above still stands for a bare
+  NRST-triggered reset, but a complete `STM32_Programmer_CLI download-verify`
+  (halt, erase, program, reset) *does* drop and re-enumerate the USB CDC
+  device: the board was COM3 with COM4 a stale phantom before the flash, and
+  afterwards the two had **swapped**. So the open question at the end of the
+  original note — whether Windows keeps the same COM number across a reset —
+  now has a partial answer: not across a flash, it doesn't. A physical
+  reinsertion is still unobserved. Practical consequence: never remember a COM
+  number across a reflash; resolve the port by USB VID/PID (see the gotcha
+  about phantom port nodes below).
 - **Library tab** — a top-level tab beside "Slots" in the main content area
   (`Views/LibraryPanel.xaml`, `ViewModels/LibraryViewModel.cs`), showing the
   whole ProtoMod catalog rather than just what's plugged in. Read-only over
@@ -703,6 +713,148 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   one. Neither problem is visible from the `.docx` alone, so check both per
   manual — and settle the adaptation with the user rather than picking one, as
   all three of F01's were.
+- **ProtoCore voltage rails — hardware facts, and a capability that does NOT
+  exist yet** (established 2026-09-07). Asked to build a rail-control tab on
+  the stated premise that "the firmware capability already exists"; it does
+  not. Recording the findings so nobody re-derives them, because two of them
+  are actively misleading if you only read the schematic.
+  **Six rails are switchable**, each one bit (P0-P5) on a PCF8574A I2C
+  expander: `LDO_1V0`, `LDO_1V2`, `BUCK_1V4`, `BUCK_1V8`, `BUCK_3V1`,
+  `BUCK_VAR`. On/off only — none is adjustable, including `BUCK_VAR`, whose
+  name refers to the regulator being an adjustable part, not to runtime
+  control.
+  **3.3 V, 4.5 V and 5 V are NOT switchable and must never be assumed to be.**
+  `BUCK_3V3_PGOOD` exists but there is no `BUCK_3V3_ENABLE` anywhere. 3V3_BUCK
+  powers the MCU, the PCA9544A identification muxes, the ProtoMod EEPROMs and
+  their I2C pull-ups — *and the PCF8574A expander itself*, so it could not be
+  switchable even in principle. The useful consequence: **switching any of the
+  six rails cannot break presence detection**, since the whole identification
+  path sits on unswitchable power. 4V5_BUCK comes from U2 (ADM7171 LDO) off
+  5 V and is not on the expander.
+  **`PGOOD` IS A TRAP. The nets are on the schematic; they are NOT routed to
+  the MCU on this hardware revision** — user, 2026-09-07: "PGOOD is not
+  available at the HW version to the MCU. It's simply the name of a net on the
+  schematic. There is no closed loop." So firmware cannot tell whether a rail
+  actually came up, and rail state is a *commanded shadow* only, never a
+  measurement. Label it that way in any UI, the same as the Electronic Load
+  panel. This matters more than it sounds: each enable line has a discrete
+  pull-down resistor fighting the PCF8574A's weak pull-up (the R31-R36 group
+  on the power sheet), which firmware's own header flags as an unverified
+  risk — and with no PGOOD, that failure mode is undetectable in software.
+  **Power tree — confirmed by netlist trace** (`kicad-cli sch export netlist
+  --format kicadxml`, walking the node lists; every regulator input runs
+  through a 2-pin link, so reading the rendered sheet alone is not enough):
+  5 V→U2(ADM7171)→`4V5_BUCK` (EN tied to 5 V, always on); `4V5_BUCK`→
+  U1→`1V4_BUCK`, U4→`3V1_BUCK`, U7→`3V3_BUCK` (EN tied to its own input,
+  always on), U9→`VAR_BUCK`; `3V1_BUCK`→U3→`1V8_BUCK`; and
+  **`1V8_BUCK`→U6→`1V0_LDO`, `1V8_BUCK`→U8→`1V2_LDO`**. That last pair is the
+  one that matters: the LDOs hang off 1V8, *not* off 3V1. **This found a real
+  bug in firmware's `power_expander.c`** — its interlock knew only
+  "3V1 feeds 1V8/1V0/1V2", so enabling an LDO with 3V1 on but 1V8 off left the
+  LDO with no input, and disabling 1V8 while an LDO was on wasn't checked at
+  all. **Fixed firmware-side 2026-09-07** (independently confirmed against the
+  hardware by that session's user first): the single mask was replaced with a
+  proper two-level parent chain that walks upward enabling ancestors, and
+  refuses a disable while any direct child is on. Dormant-code fix — nothing
+  calls the driver yet, so no reflash was needed. Any app-side warnings must
+  mirror that two-level chain, not the old flat one.
+  The PCF8574A output pins (U5.4/5/6/7/9/10 = P0-P5) map to the rails in
+  exactly firmware's enum order, so rail ids 0-5 are safe to freeze.
+  **The expander is JUMPERED to the enables — a second silent failure mode.**
+  U5 does not drive the regulator EN pins directly: each rail runs
+  `EXP_*_ENABLE` → a link (J18 1V0, J22 1V2, J26 1V4, J19 1V8, J23 3V1, J27
+  VAR) → `*_ENABLE` → regulator EN, alongside the pull-down and a second
+  jumper. If a link isn't fitted, the expander is physically disconnected and
+  the pull-down holds that rail off forever, while firmware's shadow happily
+  reports it on. Combined with the missing PGOOD that makes **two independent,
+  software-undetectable ways a rail can fail to come up** — so first bring-up
+  of any rail feature needs a meter on the rail, not trust in the UI.
+  **What firmware actually has:** a standalone, working, bench-flashed
+  `power_expander.c` driver (SetRail/IsRailEnabled/GetShadow plus one
+  dependency interlock) that **nothing calls**. There is no wire protocol at
+  all — `PROTO_ID_CORE` (0xFFF0) is only ever a *sender* id on outgoing
+  PresenceReports and isn't in `PROTOMOD_REGISTRY`, so a Command addressed to
+  it returned `PROTOCOL_ERR_NOT_PRESENT`. Building rail control meant designing
+  a shared contract and adding a Core dispatch path — real firmware work, not
+  app-side wiring.
+  **Both sides are now built (2026-09-07).** The agreed contract:
+  Core-addressed `Command`; `payload[0]` = `0x01` SetRail (`payload[1]` rail id,
+  `payload[2]` 0/1) or `0x02` GetRails; **every** sub-command replies with the
+  same snapshot `[rail_count, one byte per rail]` (7 bytes today), reflecting
+  the *full resulting state* including any ancestors auto-enabled on the way up;
+  new error `0x06` `PROTOCOL_ERR_DEPENDENCY` for an interlock refusal. A fixed
+  array with an explicit count, not a packed mask — same reasoning as
+  `PresenceReport`. App side is `Models/VoltageRail.cs` (rail catalog + supply
+  tree + wire constants), `ViewModels/RailsViewModel.cs` and
+  `Views/RailsPanel.xaml`, with `MockSerialService` mirroring the interlocks so
+  the tab works in Simulator mode. Firmware side is built and **not yet flashed**
+  — until a board runs it, a real ProtoCore answers `NOT_PRESENT`, which the tab
+  detects specifically and reports as "this firmware doesn't support rail
+  control yet" rather than showing dead toggles.
+  **Confirmed on real hardware 2026-09-07** (read-only: `GetRails` only, no rail
+  was switched). After the flash the tab's "firmware doesn't support rail
+  control" notice disappears and all six rails report real state. **All six read
+  off on a fresh connect, and that is designed, not incidental** —
+  `PowerExpander_Init()` unconditionally writes the shadow to `0x00` at boot
+  because the driver doesn't trust the PCF8574A's own power-on output state. The
+  useful consequence is the inverse: **a rail showing on at a fresh connect is a
+  real defect**, not something to wave through. Still unverified and only
+  checkable by a person at the bench: whether a rail reading on is *actually* on
+  (no PGOOD), and whether the 3V1-while-1V0-is-on refusal behaves on hardware as
+  it does in the simulator.
+  **One gap the contract doesn't cover, by firmware's deliberate choice:** if
+  the I2C write to the expander itself fails, there is no wire error for it —
+  firmware replies with the true, unchanged state. So a bus fault looks like
+  "the rail didn't move". `RailsViewModel` compares each reply against what was
+  just requested and says so when they disagree; that's the only way to
+  distinguish it, and it's a candidate for a dedicated error code later.
+- **American English everywhere.** User instruction, 2026-09-08: all text is US
+  spelling — behavior, color, recognize, gray, center, labeled, rasterize. Applies
+  to UI strings, manual content, comments, and docs alike. When sweeping for this,
+  check matches before replacing: "optimism", "realistic" and "analysis" are
+  already correct and a naive pattern mangles them.
+- **The slots column and the manual's contents column never scroll and never
+  shrink** (user instruction, 2026-09-08: "Never compromise the sizing of these
+  two windows. If necessary shrink the actual manual content. Never use scroll
+  bars."). Both are fixed-width with
+  `ScrollViewer.HorizontalScrollBarVisibility="Disabled"`, which is also what
+  makes their `TextWrapping` work — a ListBox whose ScrollViewer permits
+  horizontal scrolling measures items at infinite width, so wrapping never fires
+  and a long name clips itself behind a scroll bar instead. The manual body is the
+  column that gives way. Don't "fix" a long label by narrowing either column.
+- **Simulator board swapping.** `MockSerialService.InstalledMods` is settable at
+  runtime (`SetInstalledMods`), and changing it volunteers a fresh
+  `PresenceReport` exactly as firmware does on a hot-swap — so the simulator
+  exercises the app's real rebuild path, not a simulator-only branch.
+  `SimulatorViewModel` offers every registry board plus empty, an unrecognized
+  EEPROM, and a valid-id-with-no-panel case. Those last two used to require
+  editing the mock and rebuilding, which is why they were historically verified
+  once and then never again.
+- **Manual answer export** (`Services/ManualPdfExporter.cs`) — builds HTML from
+  the learner's in-app answers and prints it with headless Edge. **No PDF library,
+  deliberately**: Chromium print-to-PDF is already proven here (schematic assets,
+  README diagram checks) and a dependency for one feature is a poor trade. The
+  intermediate HTML is kept on failure so a failure can be inspected. Correct
+  answers are included on purpose — the app already reveals them on answering, so
+  nothing leaks, and it makes the sheet markable.
+- **ProtoMod ratings are LOCAL, and the UI must keep saying so.** Stored per
+  account in `accounts.json`; the "aggregate" is the average across profiles on
+  that one machine, often exactly one. `GetAggregateRating` returns the count
+  alongside the average and the card always displays it, because a 4.3 from one
+  rater and a 4.3 from forty are different claims. If a server ever backs this,
+  that distinction is the thing to preserve.
+- **Cheat sheets are DERIVED from the manual, never authored separately**
+  (`Models/Manual/CheatSheet.cs`): every `TechNote` callout plus every "Key
+  takeaways" bullet list, appendices excluded. A hand-written second copy of the
+  same technical claims is a copy that drifts, which is the failure the
+  no-fabrication rule exists to prevent. The practical consequence: a manual earns
+  a good cheat sheet by having good Tech note callouts and Key takeaways, not by
+  someone writing a cheat sheet.
+- **`DisplayMemberPath` does not work on this app's ComboBoxes.** `App.xaml`'s
+  custom `ComboBox` `ControlTemplate` renders the closed-state selection through
+  `SelectionBoxItemTemplate`, which WPF populates from `ItemTemplate` only — with
+  `DisplayMemberPath` alone the collapsed combo falls back to the item's
+  `ToString()` and shows a raw record. Use an explicit `ItemTemplate`.
 - **Help tab** — lives in the same collapsed-by-default bottom `Expander` as the
   Traffic Log (they're now two `TabItem`s of one `TabControl` there, not two
   separate Expanders). `HelpViewModel.RevisionNotes` is a hand-maintained,
@@ -713,14 +865,26 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   `HelpViewModel.SupportedModules` reads straight from `ModuleCatalog.SupportedModules`
   — don't hand-maintain a second "what's supported" list anywhere; if a new ProtoMod
   panel gets registered in `ModuleCatalog`, this list picks it up automatically.
-- **App icon.** `Assets/AppIcon.ico` (multi-res, 16/32/48/256px) is built from the
-  real ProtoVerse logo (`PROTOVERSE/logo.jpg`, background chroma-keyed out) —
-  set via `<ApplicationIcon>` in the `.csproj` (the `.exe`/taskbar/Explorer
-  icon) and `Window.Icon` in `MainWindow.xaml` (the title bar/Alt-Tab icon).
-  `Assets/logo_transparent_master.png` is the cropped/centered transparent
-  source, kept for re-exporting at a different size later without redoing the
-  background removal. If the logo ever changes, regenerate both from a fresh
-  export of the real logo, not by hand-editing the `.ico`.
+- **App icon.** `Assets/AppIcon.ico` (multi-res, 16/32/48/256px) — set via
+  `<ApplicationIcon>` in the `.csproj` (the `.exe`/taskbar/Explorer icon) and
+  `Window.Icon` in `MainWindow.xaml` (the title bar/Alt-Tab icon).
+  **Changed 2026-09-07 to a square tile that KEEPS the artwork's dark navy
+  starfield background** — user's explicit choice when new artwork was dropped
+  in, deliberately reversing the earlier transparent treatment. Don't "restore"
+  transparency on the assumption it's a regression. `Assets/AppIcon_source.jpg`
+  is the source artwork it was generated from, kept so the `.ico` can be
+  regenerated rather than hand-edited; `Assets/logo_transparent_master.png` is
+  the older chroma-keyed transparent master, retained in case the transparent
+  treatment is ever wanted again.
+  **A JPEG renamed to `.ico` does not work and breaks the whole build** —
+  `<ApplicationIcon>` fails with `CS7065: Error building Win32 resources --
+  Icon stream is not in the expected format`, which is how the current icon
+  arrived. Converting means writing a real ICO container (header + one
+  directory entry per size + PNG-compressed frames; the 256px frame must be
+  PNG). `tools/`-style one-off in the session scratchpad did this via
+  `System.Drawing`; verify afterwards with
+  `new System.Drawing.Icon(path)` and by extracting the icon back out of the
+  built `.exe`, not just by checking the file was written.
   **Settled sizing/weight, after live-testing several alternatives against
   the real taskbar (2026-08-30, CHANGELOG entry 35):** original (undilated)
   stroke weight - a thickened version closes the visual-weight gap against
@@ -767,6 +931,25 @@ actual `git add`/`commit`/`push` for the user to ask for or do themselves.
   Avoid semicolons in diagram labels.
 
 ## Gotchas already hit (save yourself the loop)
+
+- **Clearing an `ItemsSource` collection nulls the bound `SelectedItem`, and
+  that silently wiped a selection immediately before it was read** (found
+  2026-09-07). `RefreshPorts()` cleared `AvailablePorts`, the ComboBox pushed
+  `null` into `SelectedPort` through its `SelectedItem` binding, and
+  `ToggleConnection` — which refreshes right before checking the selection —
+  then reported "No port selected" every time. **Real hardware could not be
+  connected to at all**, and it looked like a user error rather than a bug. Any
+  refresh of a bound collection must capture the selection first and restore it
+  afterwards. Deliberately do *not* restore a value that has genuinely
+  disappeared: a board that re-enumerated under a different COM number should be
+  reported, not silently mis-targeted.
+- **A ProtoCore that resets can come back on a different COM number, with the
+  old one lingering as a phantom.** Seen for real after an ST-Link
+  `download-verify` and reset: the board was COM3 with COM4 a stale phantom
+  before the flash, and afterwards the two had swapped. Any script that talks to
+  the board should find the port by USB VID/PID (`VID_0483&PID_5740`, status
+  `OK`) rather than hardcoding a number — `SerialPort.GetPortNames()` alone
+  happily lists the phantom alongside the real one.
 
 - **After reflashing ProtoCore, the app's "Refresh" may not show a new COM
   port — this is a Windows driver issue, not an app bug.** Confirmed
