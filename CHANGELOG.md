@@ -3129,3 +3129,185 @@ and without ever leaving a module permanently unreachable.
   Load stayed locked (per-module, not global); signing out re-locked Blinky
   with the "sign in" message despite it already being unlocked for that
   account, proving the sign-in gate is checked first and independently.
+
+### 60. ProtoMod scale framework evaluation (branch: eval/long-term-scaling)
+**2026-09-07**
+
+**Prompt:** A prompt document (`protomod-scale-eval-prompt.md`) asking for an
+evaluation - not shipped production work - of whether the ProtoMod
+identification framework holds up at a 100s-1000+ module catalog scale,
+covering ID capacity, app-side hardware-revision recognition (EEPROM already
+stores it; the app doesn't use it), and multi-slot ProtoMod inference,
+"work on a throwaway branch... report back with a written recommendation."
+Clarified before implementation: a multi-slot module identifies from its
+lowest-numbered occupied slot, spanning upward - "the second slot must
+[be] assumed to be one higher than the communication slot based on hardware
+interface" - resolving the task's open "which slot reports identification"
+question with a fixed rule rather than a per-module inference.
+
+**Purpose:** De-risk the identity model before the ProtoMod catalog grows
+past a handful of hand-maintained entries, without committing to shipping
+any of it yet.
+
+**Branch:** `eval/long-term-scaling`, off `main` - not merged as part of this
+work, per the prompt's explicit instruction.
+
+**What was built** (see `EVALUATION.md` on that branch for the full
+write-up): a JSON-backed `(ProtoModId, Revision)` registry
+(`Models/Registry/`) with a loader, a validator (duplicate identity, missing
+revision, slot-span-vs-slot-count, dangling compatibility override) doubling
+as a CI check, a revision-aware catalog with three lookup outcomes (Found /
+UnrecognizedRevision / UnknownId - a recognized ID with an unfamiliar
+revision is never assumed to behave like a familiar one) and an explicit,
+human-authored compatibility-override mechanism, and a multi-slot resolver
+implementing the anchor-and-span-upward rule with conflict detection. A new
+`ProtoVerseApp.Tests` xUnit project (27 tests) covers all of it, including a
+1000-entry synthetic stress test proving catalog lookup stays nowhere near a
+performance concern at that scale and that the validator catches injected
+duplicate/span/override errors specifically.
+
+**Key findings:** ID capacity was already solved (widened to 2 bytes on
+2026-08-30, ~65,500 usable values - nothing to do here). Keying the catalog
+on `(ID, Revision)` is a contained, mechanical change - the real gap is one
+level up: `PresenceReport` has no revision field at all today, so this is
+fully demonstrated against synthetic/test data but has no live-hardware
+integration point yet; flagged as a firmware-cross-session wire-protocol
+question rather than decided unilaterally, per the prompt's constraints.
+Two of the task's three multi-slot edge cases turned out to be the same
+case from the app's perspective once the anchor rule was fixed - a hardware
+fault, a partially-seated board, and two independent modules colliding with
+a multi-slot claim are indistinguishable from the identification handshake
+alone, so the resolver treats all three as one conflict type rather than
+inventing a distinction the data can't actually support.
+
+**Recommendation:** proceed - see EVALUATION.md for the full reasoning and
+the one concrete next step (raising the `PresenceReport` revision-byte
+extension with the firmware session).
+
+### 61. Consolidate ModuleCatalog/ManualLibrary/ProtoModBoardCatalog onto the registry (branch: feature/protomod-single-source-of-truth)
+**2026-09-08**
+
+**Prompt:** After reading EVALUATION.md, the user asked whether anything else
+should be done now for future modularity given the number of ProtoMods is
+expected to grow substantially. Answer: three separate hardcoded
+`Dictionary<ProtoModId, ...>`s (`ModuleCatalog`, `ManualLibrary`,
+`ProtoModBoardCatalog`) already independently define "what is this
+ProtoMod," with no way to catch them disagreeing - which had already
+happened once (the AccelTemp/F02 circuit-code mixup). Recommended
+consolidating them onto the eval branch's registry as the highest-leverage
+fix. The user's reply: "create a single source of truth - now."
+
+**Purpose:** Turn the three independently hand-maintained identity
+dictionaries into one authored place, so a real drift bug like the one
+already shipped once becomes structurally impossible rather than merely
+avoided by care.
+
+**Branch:** `feature/protomod-single-source-of-truth`, off
+`eval/long-term-scaling` (inherits its registry/validator/catalog/resolver
+work and its test project). Real work, not a spike - not merged as part of
+this entry, pending review.
+
+**Changes:**
+- `ProtoModRegistryEntry` gains `CircuitCode` (required - the field that
+  actually drifted before) and optional `PcbRev`/`PcbaRev` (carried forward
+  from `ProtoModBoardCatalog`, informational, still unused by any UI, same as
+  before). `ProtoModRegistry.json` updated with the real circuit codes/PCB
+  revs for all four shipped identities.
+- `ProtoModRegistryValidator` gains a check for a missing circuit code,
+  matching its existing "missing revision" check.
+- New `ProtoModRegistryService` - the one lazily-loaded, validated instance
+  of the registry the rest of the app reads from. Throws loudly on first
+  access if the registry itself is malformed (undefined "which panel for
+  which board" is worse than a loud failure). Exposes
+  `FindByIdAssumingDefaultRevision`, used by every current call site, since
+  nothing on the wire carries a real revision yet (see EVALUATION.md) -
+  `DefaultRevision = "A"` is the one place that assumption lives, ready to be
+  replaced once `PresenceReport` actually carries a revision byte.
+- `ModuleCatalog`, `ManualLibrary`, and `ProtoModBoardCatalog` rewritten to
+  read from `ProtoModRegistryService` instead of their own dictionaries -
+  **every external call site (`MainViewModel`, `AccountStore`,
+  `HelpViewModel`, `PassiveModuleViewModel`, `UnknownModuleViewModel`,
+  `SlotViewModel`) is unchanged**, since all three kept their exact public
+  API. `ModuleCatalog` and `ManualLibrary` still each own one small
+  string-keyed factory dictionary (control-scheme name -> panel constructor;
+  manual-reference name -> manual factory) - real new UI/content still needs
+  real new code; only the *identity* mapping (which ID uses which scheme/
+  manual) moved to the registry. A registry entry with `"controlScheme":
+  "Passive"` is now how a board is marked passive, replacing the old
+  `ModuleCatalog.Passive` dictionary.
+- `ProtoModLibraryCatalog` (the Library tab's rich, sourced editorial catalog)
+  deliberately left alone - it isn't identity data, and covers real boards
+  with no `ProtoModId` yet (A01, F00) that the registry can't represent.
+  Instead, new `CrossCatalogConsistencyTests` check the two agree wherever
+  they overlap, in both directions (every Library entry with a `ProtocolId`
+  matches the registry's circuit code for that id; every registry entry has a
+  matching Library entry) - this is the guardrail against the AccelTemp/F02
+  class of bug recurring, without merging unrelated content models.
+- Verified end-to-end, not just unit-tested: full solution build, all 29
+  tests passing (27 existing + 2 new cross-catalog checks), and the actual
+  app run in Simulator mode - presence detection, all three live panels,
+  the manual-progress lock overlay, and the Help tab's "Currently supported
+  ProtoMods" list (circuit codes included) all confirmed identical to
+  pre-consolidation behavior.
+- `CLAUDE.md` updated: the "adding a new ProtoMod" and "passive board"
+  passages now describe the registry-driven flow instead of the old
+  per-dictionary one, and a new note explains why `ProtoModLibraryCatalog`
+  stays separate on purpose.
+
+### 62. Manual-authoring guide (docs/writing-a-protomod-manual.md)
+**2026-09-08**
+
+**Prompt:** After `docs/adding-a-protomod.md` (the code-integration checklist),
+the user asked for a companion doc specifically about writing a new manual's
+*content*: integrating everything already known about the F/E/A families and
+how much prior knowledge each should assume, checking for progression links
+("next steps") between ProtoMods in both directions, and anything else needed
+for "a highly polished professional learning experience." Then: "push
+everything to git so I can complete a pull request for these changes into
+main later this evening."
+
+**Purpose:** Capture the manual-writing policy that already exists (scattered
+across CLAUDE.md and the doc comments in `BlinkyManual.cs`/
+`ElectronicLoadManual.cs`) as one dedicated, checklist-shaped reference, so
+writing manual four doesn't require re-deriving what F01/F02/E05 already
+settled by trial and error.
+
+**Content, all grounded in decisions already on record (nothing new invented
+for this doc):**
+- Family (F/E/A) is the one field derived rather than quoted (first letter of
+  circuit code, confirmed 2026-08-31) - and what's actually confirmed about
+  each family's assumed-knowledge level: F assumes almost nothing (explain
+  every term on first use, "never used a multimeter" is the default reader),
+  E (the template family, via E05) can assume Ohm's law/schematics/a
+  multimeter, and **A is explicitly flagged as not yet established by
+  precedent** - no invented "Advanced pitch," since no Advanced manual has
+  been written in-app yet.
+- The settled template shape from E05 (five sections + one appendix, inline
+  `Observe` prompts instead of a separate section, self-marking multiple
+  choice instead of an answer-key appendix, no assembly steps) - and that
+  the "Set up and try it" section's `Id` must be the literal string
+  `"setup"` in every manual, since the sign-in/manual-progress control lock
+  keys off exactly that string.
+- The two real adaptation patterns already hit rewriting source `.docx`
+  content against the actual app/firmware (activities written as if the
+  learner programs GPIO directly; a Creative Challenge asking the learner to
+  build something firmware already ships as a built-in option) - both from
+  F01, both worth checking on every new manual.
+- `CalloutKind.Discrepancy` vs `NeedsReview` vs `Placeholder`, used
+  correctly and not interchangeably.
+- A dedicated step to check for progression links **in both directions**:
+  forward (does this manual's own text suggest a next board), and backward
+  (does an *already-written* manual contain a sentence pointing at this one
+  that was previously unusable because the target didn't exist in-app yet) -
+  directly answering the user's ask to integrate next-step/sequential-
+  learning checks, grounded in how the one real link that exists today
+  (F01 -> F02) was actually established.
+- A note that a passive board (no software controls) still gets full manual
+  treatment - "passive" and "has a manual" are unrelated facts (F02 is both).
+- A final pre-ship checklist covering all of the above plus source citation
+  discipline, difficulty/time estimate honesty, and actually opening the
+  manual in the running app before calling it done.
+
+**Also:** everything currently on `feature/protomod-single-source-of-truth`
+(this doc plus entries 61-62's work) pushed to the remote per the user's
+request, for a PR into `main` later the same evening.

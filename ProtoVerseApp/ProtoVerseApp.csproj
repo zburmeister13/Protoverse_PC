@@ -44,5 +44,14 @@
     <None Include="Assets\Schematics\*.*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Scale-framework evaluation (eval/long-term-scaling branch) - the single
+         source of truth for (ProtoModId, Revision) identity. See
+         Models/Registry/ProtoModRegistryEntry.cs and EVALUATION.md. Copied beside the
+         .exe so ProtoModRegistryLoader can read it as a real file, same reasoning as
+         the schematics above. -->
+    <None Include="Models\Registry\ProtoModRegistry.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
 
