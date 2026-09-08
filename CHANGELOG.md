@@ -3253,3 +3253,61 @@ this entry, pending review.
   passages now describe the registry-driven flow instead of the old
   per-dictionary one, and a new note explains why `ProtoModLibraryCatalog`
   stays separate on purpose.
+
+### 62. Manual-authoring guide (docs/writing-a-protomod-manual.md)
+**2026-09-08**
+
+**Prompt:** After `docs/adding-a-protomod.md` (the code-integration checklist),
+the user asked for a companion doc specifically about writing a new manual's
+*content*: integrating everything already known about the F/E/A families and
+how much prior knowledge each should assume, checking for progression links
+("next steps") between ProtoMods in both directions, and anything else needed
+for "a highly polished professional learning experience." Then: "push
+everything to git so I can complete a pull request for these changes into
+main later this evening."
+
+**Purpose:** Capture the manual-writing policy that already exists (scattered
+across CLAUDE.md and the doc comments in `BlinkyManual.cs`/
+`ElectronicLoadManual.cs`) as one dedicated, checklist-shaped reference, so
+writing manual four doesn't require re-deriving what F01/F02/E05 already
+settled by trial and error.
+
+**Content, all grounded in decisions already on record (nothing new invented
+for this doc):**
+- Family (F/E/A) is the one field derived rather than quoted (first letter of
+  circuit code, confirmed 2026-08-31) - and what's actually confirmed about
+  each family's assumed-knowledge level: F assumes almost nothing (explain
+  every term on first use, "never used a multimeter" is the default reader),
+  E (the template family, via E05) can assume Ohm's law/schematics/a
+  multimeter, and **A is explicitly flagged as not yet established by
+  precedent** - no invented "Advanced pitch," since no Advanced manual has
+  been written in-app yet.
+- The settled template shape from E05 (five sections + one appendix, inline
+  `Observe` prompts instead of a separate section, self-marking multiple
+  choice instead of an answer-key appendix, no assembly steps) - and that
+  the "Set up and try it" section's `Id` must be the literal string
+  `"setup"` in every manual, since the sign-in/manual-progress control lock
+  keys off exactly that string.
+- The two real adaptation patterns already hit rewriting source `.docx`
+  content against the actual app/firmware (activities written as if the
+  learner programs GPIO directly; a Creative Challenge asking the learner to
+  build something firmware already ships as a built-in option) - both from
+  F01, both worth checking on every new manual.
+- `CalloutKind.Discrepancy` vs `NeedsReview` vs `Placeholder`, used
+  correctly and not interchangeably.
+- A dedicated step to check for progression links **in both directions**:
+  forward (does this manual's own text suggest a next board), and backward
+  (does an *already-written* manual contain a sentence pointing at this one
+  that was previously unusable because the target didn't exist in-app yet) -
+  directly answering the user's ask to integrate next-step/sequential-
+  learning checks, grounded in how the one real link that exists today
+  (F01 -> F02) was actually established.
+- A note that a passive board (no software controls) still gets full manual
+  treatment - "passive" and "has a manual" are unrelated facts (F02 is both).
+- A final pre-ship checklist covering all of the above plus source citation
+  discipline, difficulty/time estimate honesty, and actually opening the
+  manual in the running app before calling it done.
+
+**Also:** everything currently on `feature/protomod-single-source-of-truth`
+(this doc plus entries 61-62's work) pushed to the remote per the user's
+request, for a PR into `main` later the same evening.
