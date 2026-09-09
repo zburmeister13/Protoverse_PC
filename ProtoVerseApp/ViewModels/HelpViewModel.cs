@@ -26,6 +26,12 @@ namespace ProtoVerseApp.ViewModels
         /// they see or can do does.</summary>
         public IReadOnlyList<string> RevisionNotes { get; } = new[]
         {
+            "Every manual now has a Cheat sheet button - a one-page reference with just that ProtoMod's formulas and key takeaways, in its own window so you can keep it open while you work.",
+            "Manuals can now export your answers as a PDF, with the correct answers alongside, so you can hand in a record of a completed lab.",
+            "You can rate a ProtoMod in the Library, and each card shows the average rating from the profiles on this computer.",
+            "Simulator mode can now swap which ProtoMods are in each slot, including empty and unrecognized boards, so the whole app can be explored without hardware.",
+            "The slot list and manual contents no longer clip long names behind a scroll bar.",
+            "Added a Rails tab for switching ProtoCore's six adjustable supply rails on and off. It says what a rail depends on before you switch it, and shows commanded state - this board revision can't report whether a rail actually came up, so measure it if it matters.",
             "Added profiles (top right) so each person tracks their own kit, and the Library now asks whether a ProtoMod you plugged in is yours - answerable either way, and changeable later.",
             "The Library now remembers ProtoMods you've connected before, so they stay listed after you unplug them.",
             "The Library can now be filtered to one ProtoMod family: Fundamentals, Explorers, or Advanced.",

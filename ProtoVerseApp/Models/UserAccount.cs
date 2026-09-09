@@ -55,6 +55,13 @@ namespace ProtoVerseApp.Models
         /// absent defaults it to false, which is the locked state, intentionally).</summary>
         [JsonPropertyName("setupUnlocked")]
         public bool SetupUnlocked { get; set; }
+
+        /// <summary>This account's star rating for the ProtoMod, 1-5, or null if they
+        /// haven't rated it. Null rather than 0 on purpose: "not rated" and "rated
+        /// badly" are different answers, and averaging a 0 in for everyone who never
+        /// rated would drag every score toward nothing.</summary>
+        [JsonPropertyName("rating")]
+        public int? Rating { get; set; }
     }
 
     /// <summary>

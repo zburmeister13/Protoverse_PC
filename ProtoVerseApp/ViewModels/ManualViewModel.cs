@@ -205,6 +205,18 @@ namespace ProtoVerseApp.ViewModels
         public bool ShowContent => !IsSpoiler || IsRevealed;
         public bool ShowRevealButton => IsSpoiler && !IsRevealed;
 
+        /// <summary>Whether this section contains anything the learner answers - free
+        /// text questions, multiple choice, or a fillable table. Drives where the
+        /// "export my answers" action appears: at the end of the quiz the learner just
+        /// finished, rather than in the manual header, which is the wrong end of the
+        /// document to be offering it from.
+        ///
+        /// Computed from the block types rather than the section id or title, so it
+        /// keeps working for a manual that puts its questions somewhere else or calls
+        /// the section something different.</summary>
+        public bool HasQuiz => Blocks.Any(b =>
+            b is QuestionListViewModel or MultipleChoiceViewModel or ValueTableViewModel);
+
         public ManualSectionViewModel(ManualSection section, IReadOnlyList<object> blocks)
         {
             Section = section;

@@ -215,6 +215,79 @@ namespace ProtoVerseApp.ViewModels
         [RelayCommand]
         private void ToggleKit() =>
             _library.SetKitStatus(this, KitStatus == KitStatus.InKit ? KitStatus.NotMine : KitStatus.InKit);
+
+        // ------------------------------------------------------------------ ratings
+
+        /// <summary>This account's own rating, 0 when unrated - drives which stars show
+        /// as filled.</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(RatingHint))]
+        private int _myRating;
+
+        /// <summary>Aggregate across every profile on this machine. See
+        /// <see cref="Services.AccountStore.GetAggregateRating"/> for why the count
+        /// travels with the average rather than being optional.</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(RatingLabel))]
+        [NotifyPropertyChangedFor(nameof(HasRatings))]
+        private double? _averageRating;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(RatingLabel))]
+        [NotifyPropertyChangedFor(nameof(HasRatings))]
+        private int _ratingCount;
+
+        public bool HasRatings => RatingCount > 0;
+
+        /// <summary>e.g. "4.3 ★ (3 ratings)". The count is never hidden: the same
+        /// average from one rater and from forty are different claims, and only the
+        /// count keeps them apart.</summary>
+        public string RatingLabel => AverageRating is not { } avg
+            ? "Not yet rated"
+            : $"{avg:0.0} ★  ({RatingCount} rating{(RatingCount == 1 ? "" : "s")})";
+
+        public string RatingHint => MyRating > 0
+            ? $"Your rating: {MyRating}/5 - click it again to clear"
+            : "Click a star to rate this ProtoMod";
+
+        /// <summary>Five bindable stars, so the view is one ItemsControl rather than
+        /// five near-identical hand-written buttons.</summary>
+        public IReadOnlyList<StarViewModel> Stars =>
+            _stars ??= Enumerable.Range(1, 5).Select(n => new StarViewModel(this, n)).ToList();
+        private IReadOnlyList<StarViewModel>? _stars;
+
+        partial void OnMyRatingChanged(int value)
+        {
+            foreach (var star in Stars)
+                star.Refresh(value);
+        }
+
+        /// <summary>Clicking the star you already gave clears the rating, so a rating
+        /// can be taken back rather than only ever changed.</summary>
+        internal void Rate(int stars) => _library.SetRating(this, stars == MyRating ? null : stars);
+    }
+
+    /// <summary>One clickable star.</summary>
+    public partial class StarViewModel : ObservableObject
+    {
+        private readonly LibraryEntryViewModel _entry;
+
+        public int Value { get; }
+
+        [ObservableProperty]
+        private bool _isFilled;
+
+        public StarViewModel(LibraryEntryViewModel entry, int value)
+        {
+            _entry = entry;
+            Value = value;
+            IsFilled = entry.MyRating >= value;
+        }
+
+        internal void Refresh(int myRating) => IsFilled = myRating >= Value;
+
+        [RelayCommand]
+        private void Click() => _entry.Rate(Value);
     }
 
     /// <summary>
@@ -395,6 +468,16 @@ namespace ProtoVerseApp.ViewModels
             _accounts.SetKitStatus(id, status);  // raises Changed -> RefreshConnectionStates
         }
 
+        /// <summary>Records a star rating for a card. Routed through here for the same
+        /// reason kit answers are: one place writes to the store.</summary>
+        public void SetRating(LibraryEntryViewModel entry, int? stars)
+        {
+            if (entry.Entry.ProtocolId is not { } id)
+                return;
+
+            _accounts.SetRating(id, stars);  // raises Changed -> RefreshConnectionStates
+        }
+
         private void RefreshConnectionStates(HashSet<ProtoModId> present)
         {
             bool signedIn = _accounts.IsSignedIn;
@@ -404,6 +487,17 @@ namespace ProtoVerseApp.ViewModels
                 entry.IsSignedIn = signedIn;
 
                 var record = entry.Entry.ProtocolId is { } id ? _accounts.FindRecord(id) : null;
+
+                // Ratings refresh here rather than in their own pass: signing in or out
+                // changes whose rating "mine" means, and every write already routes
+                // through Changed, so this is the one place that has to stay correct.
+                if (entry.Entry.ProtocolId is { } ratingId)
+                {
+                    var (average, count) = _accounts.GetAggregateRating(ratingId);
+                    entry.AverageRating = average;
+                    entry.RatingCount = count;
+                    entry.MyRating = _accounts.GetMyRating(ratingId) ?? 0;
+                }
 
                 // A record can exist with no sighting behind it - the user can claim a
                 // board they own but have never plugged in - so "seen" is the timestamp

@@ -47,6 +47,16 @@ namespace ProtoVerseApp.ViewModels
         [ObservableProperty]
         private SlotViewModel? _selectedSlot;
         public TrafficLogViewModel TrafficLog { get; }
+
+        /// <summary>ProtoCore's own supply rails - the Rails tab. Not a slot panel:
+        /// these belong to the host board, not to any ProtoMod, which is why it sits
+        /// beside Slots and Library rather than inside a slot workspace.</summary>
+        public RailsViewModel RailsControl { get; }
+
+        /// <summary>Simulator-only control for choosing what is in each slot. Hidden
+        /// against real hardware, where that is a physical fact rather than a
+        /// setting.</summary>
+        public SimulatorViewModel Simulator { get; }
         public HelpViewModel Help { get; } = new();
 
         /// <summary>Local profiles, so two people sharing a PC track separate kits.
@@ -98,6 +108,9 @@ namespace ProtoVerseApp.ViewModels
             _dispatcher.Disconnected += OnTransportDisconnected;
 
             TrafficLog = new TrafficLogViewModel(_dispatcher);
+            RailsControl = new RailsViewModel(_dispatcher);
+            Simulator = new SimulatorViewModel(SlotCount);
+            Simulator.SetTransport(_serial);
 
             ResetSlotsToEmpty();
 
@@ -113,15 +126,35 @@ namespace ProtoVerseApp.ViewModels
 
             _serial = value ? new MockSerialService() : new SerialService();
             _dispatcher.SetTransport(_serial);
+            Simulator.SetTransport(_serial);
             StatusMessage = value ? "Simulator mode enabled - no hardware required" : "Simulator mode disabled";
         }
 
         [RelayCommand]
         private void RefreshPorts()
         {
+            // Clearing the collection makes the ComboBox push null back into
+            // SelectedPort through its SelectedItem binding, so the choice has to be
+            // captured first and restored afterwards.
+            //
+            // Without this, ToggleConnection's refresh-then-connect wiped the user's
+            // selection immediately before checking it, so connecting to a real port
+            // reported "No port selected" every single time and real hardware could
+            // not be reached at all. Found 2026-09-07 trying to connect to a freshly
+            // flashed board.
+            //
+            // A port that has genuinely gone away is deliberately NOT restored: the
+            // selection stays empty and the user is told, which is the honest outcome
+            // when a board re-enumerates under a different COM number - the exact case
+            // the refresh-before-connect exists to catch.
+            var previouslySelected = SelectedPort;
+
             AvailablePorts.Clear();
             foreach (var port in SerialService.GetAvailablePorts())
                 AvailablePorts.Add(port);
+
+            if (previouslySelected != null && AvailablePorts.Contains(previouslySelected))
+                SelectedPort = previouslySelected;
         }
 
         /// <summary>Single button behind Connect, Disconnect, and Refresh: which of the
@@ -190,6 +223,12 @@ namespace ProtoVerseApp.ViewModels
                 // hot-swap).
                 StatusMessage = $"Connected to {(SimulatorMode ? "Simulator" : SelectedPort)} - requesting installed ProtoMods...";
                 _dispatcher.RequestPresence();
+
+                // Rail state is asked for, never assumed - the Rails tab must not
+                // imply everything is on before the board has said so. This is also
+                // what discovers whether the board's firmware supports rail control
+                // at all: older builds answer with NOT_PRESENT.
+                RailsControl.OnConnected();
             }
             else
             {
@@ -216,6 +255,7 @@ namespace ProtoVerseApp.ViewModels
             IsConnected = false;
             StatusMessage = statusMessage;
             ResetSlotsToEmpty();
+            RailsControl.OnDisconnected();
         }
 
         [RelayCommand]

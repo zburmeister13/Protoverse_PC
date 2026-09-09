@@ -4,6 +4,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using ProtoVerseApp.Models.Manual;
+using ProtoVerseApp.Services;
 using ProtoVerseApp.ViewModels;
 
 namespace ProtoVerseApp.Views
@@ -52,7 +54,7 @@ namespace ProtoVerseApp.Views
 
             var target = _viewModel.SelectedSection;
 
-            // The section may not be realised yet if it's far down the list, so defer
+            // The section may not be realized yet if it's far down the list, so defer
             // to a lower dispatcher priority and let layout run first.
             Dispatcher.BeginInvoke(new Action(() =>
             {
@@ -125,6 +127,63 @@ namespace ProtoVerseApp.Views
             }
 
             return null;
+        }
+
+        /// <summary>Opens this module's cheat sheet. A window rather than a pane, so
+        /// it can stay open beside the app while working.</summary>
+        private void OnCheatSheetClick(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is not ManualViewModel manual)
+                return;
+
+            var sheet = CheatSheet.Build(manual.Document);
+            var window = new CheatSheetWindow(sheet)
+            {
+                Owner = Window.GetWindow(this),
+                Title = $"Cheat sheet - {manual.Document.Header.Name} ({manual.Document.ModuleCode})"
+            };
+            window.Show();
+        }
+
+        /// <summary>Exports the learner's answers as a PDF. Lives in the code-behind
+        /// because it needs a save dialog and the signed-in name from the window's own
+        /// view model - both view concerns rather than manual-content ones.</summary>
+        private void OnExportAnswersClick(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is not ManualViewModel manual)
+                return;
+
+            var learner = (Window.GetWindow(this)?.DataContext as MainViewModel)?.Account.Store.ActiveAccount?.DisplayName;
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Save lab answers",
+                Filter = "PDF document (*.pdf)|*.pdf",
+                DefaultExt = ".pdf",
+                FileName = $"{manual.Document.ModuleCode}_{Sanitize(learner)}_answers.pdf"
+            };
+
+            if (dialog.ShowDialog() != true)
+                return;
+
+            var result = ManualPdfExporter.Export(manual, learner, dialog.FileName);
+
+            MessageBox.Show(
+                result.Message,
+                result.Success ? "Answers exported" : "Export failed",
+                MessageBoxButton.OK,
+                result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+
+        /// <summary>Keeps a display name usable as a file name - profile names are free
+        /// text and can legitimately contain characters Windows rejects.</summary>
+        private static string Sanitize(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "unsigned";
+
+            var cleaned = new string(name.Where(c => !System.IO.Path.GetInvalidFileNameChars().Contains(c)).ToArray());
+            return string.IsNullOrWhiteSpace(cleaned) ? "unsigned" : cleaned.Trim().Replace(' ', '_');
         }
     }
 }

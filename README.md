@@ -39,7 +39,7 @@ picker. Pull a board mid-session and plug in a different one and the slot
 re-resolves itself live, because ProtoCore volunteers a fresh report on
 hot-swap rather than waiting to be asked.
 
-The left rail is the slot navigator: three physical slots, a colour-coded
+The left rail is the slot navigator: three physical slots, a color-coded
 status dot each, and whether that board ships a manual. Selecting one opens its
 workspace — controls on top, manual underneath.
 
@@ -130,6 +130,34 @@ manual predates the current template, so some passages had to be written for
 the app with no document behind them. Those are flagged in place and counted at
 the top. Unsourced content that *looks* finished is more dangerous than content
 that is obviously missing — the only way to catch it is to have it say so.
+
+### Control the host board's own supply rails
+
+![The Rails tab: six switchable rails, three of them on, with dependency notes explaining what can't be switched off yet](docs/screenshots/rails.png)
+
+The **Rails** tab switches ProtoCore's six adjustable supply rails on and off.
+3.3 V, 4.5 V and 5 V are deliberately absent: they are unswitchable in hardware,
+because they power the MCU, the module identification bus, and the I/O expander
+that drives the other rails' enable lines.
+
+Rails depend on each other — the 1.0 V and 1.2 V LDOs are fed from 1.8 V, which
+is fed from 3.1 V — so the tab **explains before it acts and reports after**:
+
+- Before a click that cascades, the row says what else it is about to switch on.
+- Firmware refuses a switch-off while something still runs from that rail, and
+  the tab shows the reason it gave.
+
+Firmware is the authority on those rules. The app mirrors the supply tree only
+to explain them, and never blocks a command on its own model — if the two ever
+disagree, the device wins and says so, rather than the app silently forbidding
+something that would have worked.
+
+**These readings are commanded, not measured**, and the tab says so on its face.
+This board revision doesn't route power-good back to the processor, so nothing
+in software can confirm a rail actually came up. The variable buck shows no
+voltage at all, because its output is trimmed on the board and nobody has told
+the app what it is — a blank is better than a confident wrong number on a power
+rail.
 
 ### Nothing hidden on the wire
 
@@ -247,7 +275,7 @@ degrades its own slot and nothing else.
 ```mermaid
 flowchart TD
     START["ProtoModId reported for slot N"] --> Q1{"None?"}
-    Q1 -->|yes| EMPTY["<b>Empty</b><br/>grey dot"]
+    Q1 -->|yes| EMPTY["<b>Empty</b><br/>gray dot"]
     Q1 -->|no| Q2{"Registered in<br/>ModuleCatalog?"}
     Q2 -->|yes| LIVE["<b>Live control panel</b><br/>green dot"]
     Q2 -->|no| Q3{"Listed as<br/>passive?"}
@@ -369,7 +397,7 @@ dotnet run --project ProtoVerseApp/ProtoVerseApp.csproj
 No hardware needed — tick **Simulator mode**, then **Connect**.
 
 `tools/build_schematics.ps1` regenerates the bundled schematic assets from the
-KiCad sources (requires KiCad 9 and Microsoft Edge, which rasterises the SVG).
+KiCad sources (requires KiCad 9 and Microsoft Edge, which rasterizes the SVG).
 
 ---
 
@@ -384,6 +412,7 @@ against real hardware*, and does not round one up to another.
 | **Electronic Load (E05)** | Wire format settled and confirmed on hardware across a full 1-300 mA sweep. |
 | **Simple LED (F02)** | Passive board; identity confirmed. No commands exist to verify. |
 | **Accel + Temp (E03)** | UI complete — temperature trend, X/Y tilt plot, Z fill gauge — but the payload layout is an explicit placeholder pending firmware defining the real command set. |
+| **Voltage rails** | Contract agreed and implemented on both sides, verified end to end in Simulator mode and unit-tested. Not yet exercised against real hardware — and note that two failure modes here are undetectable in software, so measure a rail rather than trusting the tab. |
 | **Presence + hot-swap** | Confirmed on hardware. Fault isolation additionally verified by deliberate fault injection. |
 | **Disconnect on cable pull** | Handled and regression-tested, but never reproduced against a genuinely hung OS handle. |
 | **In-app manuals** | Rendering verified end to end. Manual *content* is sourced from real documents; anything unsourced is flagged in-app. |

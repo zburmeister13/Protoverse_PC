@@ -13,17 +13,17 @@
 #
 # The PNG is made by exporting SVG with kicad-cli's exclude-drawing-sheet
 # option (no border, no title block), tightening its viewBox to the drawn
-# content, recolouring it white-on-black, and rasterising with headless Edge -
-# there is no SVG rasteriser or PDF tool on this machine (no Inkscape,
+# content, recolouring it white-on-black, and rasterizing with headless Edge -
+# there is no SVG rasterizer or PDF tool on this machine (no Inkscape,
 # Ghostscript, ImageMagick or Python).
 #
-# WHITE ON BLACK, NOT KICAD'S COLOURS. KiCad draws schematics in its own
+# WHITE ON BLACK, NOT KICAD'S COLORS. KiCad draws schematics in its own
 # palette (dark red wires, teal pins, green junctions) on white. Dropped into
 # this app's near-black theme that reads as a bright rectangle pasted onto the
 # page, and the palette carries no meaning a learner needs. Every stroke and
 # fill is recoloured to white over a black page instead, so the figure belongs
 # to the manual around it. The linked PDF is untouched and still in full
-# colour - that is the reference drawing, and it opens in its own viewer.
+# color - that is the reference drawing, and it opens in its own viewer.
 #
 # THE BOUNDS MUST INCLUDE TEXT. An earlier version measured only <path> and
 # <circle> geometry and clipped reference designators, pin names and component
@@ -41,7 +41,7 @@ param(
     [string]$KiCadCli   = "E:\KiCad 9.0\bin\kicad-cli.exe",
     [string]$Edge       = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     [double]$MarginMm   = 4.0,
-    # Rasterised well above display size: the manual shows the PNG at ~290px
+    # Rasterized well above display size: the manual shows the PNG at ~290px
     # tall, and rendering at 8 px/mm then letting WPF scale down keeps hairline
     # wires and 1mm text legible instead of aliasing them away.
     [double]$PxPerMm    = 8.0
@@ -145,7 +145,7 @@ foreach ($code in $boards.Keys | Sort-Object) {
     $w = $maxX - $minX; $h = $maxY - $minY
     $pxW = [int][Math]::Ceiling($w * $PxPerMm); $pxH = [int][Math]::Ceiling($h * $PxPerMm)
 
-    # Retarget the SVG at just the circuit, then let Edge rasterise it.
+    # Retarget the SVG at just the circuit, then let Edge rasterize it.
     $cropped = [regex]::Replace($svg,
         'width="[^"]*"\s+height="[^"]*"\s+viewBox="[^"]*"',
         ('width="{0}px" height="{1}px" viewBox="{2:F3} {3:F3} {4:F3} {5:F3}"' -f $pxW, $pxH, $minX, $minY, $w, $h),

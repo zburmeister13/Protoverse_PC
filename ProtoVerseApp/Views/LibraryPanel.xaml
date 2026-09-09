@@ -77,6 +77,49 @@
                                                Foreground="{StaticResource TextSecondaryBrush}"
                                                Visibility="{Binding HasTimeEstimate, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 </StackPanel>
+
+                                <!-- Rating: the aggregate score, then this account's own
+                                     stars. Rating requires signing in, like the kit
+                                     answer - an opinion belongs to somebody. The
+                                     aggregate is across profiles on THIS machine, which
+                                     the tooltip says outright rather than letting it
+                                     read as a community score. -->
+                                <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                    <TextBlock Text="{Binding RatingLabel}" FontSize="11" VerticalAlignment="Center"
+                                               Foreground="{StaticResource AccentOrangeBrush}"
+                                               ToolTip="Averaged across the profiles on this computer"/>
+                                    <ItemsControl ItemsSource="{Binding Stars}" Margin="10,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="{Binding RatingHint}"
+                                                  Visibility="{Binding IsSignedIn, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Command="{Binding ClickCommand}" Cursor="Hand"
+                                                        Padding="1,0" Margin="1,0,0,0">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <TextBlock x:Name="star" Text="★" FontSize="14"
+                                                                       Foreground="{StaticResource BorderBrush}"/>
+                                                            <ControlTemplate.Triggers>
+                                                                <DataTrigger Binding="{Binding IsFilled}" Value="True">
+                                                                    <Setter TargetName="star" Property="Foreground"
+                                                                            Value="{StaticResource AccentOrangeBrush}"/>
+                                                                </DataTrigger>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="star" Property="Foreground"
+                                                                            Value="{StaticResource AccentTealBrush}"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
                             </StackPanel>
 
                             <Border x:Name="badge" Grid.Column="1" VerticalAlignment="Top"

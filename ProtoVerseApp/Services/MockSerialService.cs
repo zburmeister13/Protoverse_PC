@@ -17,10 +17,31 @@ namespace ProtoVerseApp.Services
     /// </summary>
     public class MockSerialService : ISerialService
     {
-        private static readonly ProtoModId[] InstalledMods =
+        /// <summary>What the fake ProtoCore reports as plugged in, one entry per
+        /// physical slot. Settable at runtime so the Simulator can swap boards the way
+        /// a person swaps them on the bench - see <see cref="SetInstalledMods"/>.
+        ///
+        /// Per-instance rather than static: toggling Simulator mode constructs a new
+        /// MockSerialService, and a static array would leak one session's arrangement
+        /// into the next.</summary>
+        private ProtoModId[] _installedMods =
         {
             ProtoModId.BlinkyLed, ProtoModId.AccelTemp, ProtoModId.ElectronicLoad
         };
+
+        /// <summary>Replaces the simulated slot lineup and, if connected, immediately
+        /// volunteers a fresh PresenceReport - exactly as real firmware does when it
+        /// notices a hot-swap. That means the app's normal rebuild path handles this,
+        /// with no simulator-specific branch anywhere in the view models.</summary>
+        public void SetInstalledMods(IReadOnlyList<ProtoModId> mods)
+        {
+            _installedMods = mods.ToArray();
+
+            if (IsConnected)
+                ScheduleReply(BuildPresenceReport());
+        }
+
+        public IReadOnlyList<ProtoModId> InstalledMods => _installedMods;
 
         private readonly Random _rng = new();
         private readonly List<Timer> _pendingReplies = new();
@@ -96,16 +117,14 @@ namespace ProtoVerseApp.Services
         private ProtocolFrame? BuildReply(ProtocolFrame frame)
         {
             if (frame.ModuleId == ProtoModId.Core && frame.Type == MsgType.PresenceRequest)
-            {
-                // 2 bytes little-endian per ProtoModId, matching the widened wire format.
-                var payload = InstalledMods
-                    .SelectMany(m => new[] { (byte)((ushort)m & 0xFF), (byte)((ushort)m >> 8) })
-                    .ToArray();
-                return new ProtocolFrame(ProtoModId.Core, MsgType.PresenceReport, payload);
-            }
+                return BuildPresenceReport();
 
             if (frame.Type != MsgType.Command)
                 return null;
+
+            // ProtoCore's own supply rails, addressed to Core rather than to a slot.
+            if (frame.ModuleId == ProtoModId.Core)
+                return BuildRailReply(frame);
 
             // Sub-command byte conventions here match the placeholders in the panel
             // view models (BlinkyLedViewModel, ElectronicLoadViewModel) - update if
@@ -142,6 +161,90 @@ namespace ProtoVerseApp.Services
                     return null;
             }
         }
+
+        /// <summary>One ProtoModId per slot, 2 bytes little-endian each, in slot order -
+        /// the fixed-size format real firmware uses. An empty slot reports None rather
+        /// than being omitted.</summary>
+        private ProtocolFrame BuildPresenceReport()
+        {
+            var payload = _installedMods
+                .SelectMany(m => new[] { (byte)((ushort)m & 0xFF), (byte)((ushort)m >> 8) })
+                .ToArray();
+            return new ProtocolFrame(ProtoModId.Core, MsgType.PresenceReport, payload);
+        }
+
+        /// <summary>Simulated rail state. Starts all-off, which is what real hardware
+        /// does at power-up: every enable line has a pull-down holding its regulator
+        /// off until firmware drives it.</summary>
+        private readonly bool[] _rails = new bool[6];
+
+        /// <summary>Rail control, addressed to Core. Mirrors firmware's behavior
+        /// closely enough to exercise the UI properly - including the interlocks,
+        /// because "what happens when I switch off a rail something else runs from"
+        /// is the main thing worth rehearsing without hardware.</summary>
+        private ProtocolFrame? BuildRailReply(ProtocolFrame frame)
+        {
+            if (frame.Payload.Length < 1)
+                return RailError(ProtocolErrBadPayloadLen);
+
+            switch (frame.Payload[0])
+            {
+                case VoltageRailCatalog.CmdGetRails:
+                    return BuildRailSnapshot();
+
+                case VoltageRailCatalog.CmdSetRail:
+                    if (frame.Payload.Length < 3)
+                        return RailError(ProtocolErrBadPayloadLen);
+
+                    byte railIndex = frame.Payload[1];
+                    byte state = frame.Payload[2];
+                    if (railIndex >= _rails.Length || state > 1)
+                        return RailError(ProtocolErrBadValue);
+
+                    var id = (RailId)railIndex;
+                    if (state == 1)
+                    {
+                        // Walk up enabling ancestors, exactly as firmware does - so a
+                        // single click can legitimately bring up three rails, and the
+                        // snapshot below reports all of them.
+                        foreach (var ancestor in VoltageRailCatalog.AncestorsOf(id))
+                            _rails[(int)ancestor.Id] = true;
+                        _rails[railIndex] = true;
+                    }
+                    else
+                    {
+                        // Refuse while anything is still powered from this rail.
+                        foreach (var child in VoltageRailCatalog.ChildrenOf(id))
+                        {
+                            if (_rails[(int)child.Id])
+                                return RailError(VoltageRailCatalog.ErrDependency);
+                        }
+                        _rails[railIndex] = false;
+                    }
+                    return BuildRailSnapshot();
+
+                default:
+                    return RailError(ProtocolErrUnknownMsgType);
+            }
+        }
+
+        /// <summary>[rail_count, one byte per rail] - the same snapshot every rail
+        /// sub-command returns.</summary>
+        private ProtocolFrame BuildRailSnapshot()
+        {
+            var payload = new byte[_rails.Length + 1];
+            payload[0] = (byte)_rails.Length;
+            for (int i = 0; i < _rails.Length; i++)
+                payload[i + 1] = (byte)(_rails[i] ? 1 : 0);
+            return new ProtocolFrame(ProtoModId.Core, MsgType.Response, payload);
+        }
+
+        private static ProtocolFrame RailError(byte code) =>
+            new(ProtoModId.Core, MsgType.Error, new[] { code });
+
+        private const byte ProtocolErrUnknownMsgType = 0x02;
+        private const byte ProtocolErrBadPayloadLen = 0x03;
+        private const byte ProtocolErrBadValue = 0x05;
 
         /// <summary>Every BlinkyLed Command gets back the same 7-byte full-state
         /// snapshot, regardless of which sub-command triggered it - matches the

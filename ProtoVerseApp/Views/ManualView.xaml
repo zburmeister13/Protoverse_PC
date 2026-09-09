@@ -58,7 +58,7 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- Callout: one visual treatment, four colour/label variants driven off Kind.
+        <!-- Callout: one visual treatment, four color/label variants driven off Kind.
              These are single-row tables in the Word source; treating them as a first
              class block type (rather than a styled paragraph) is what lets a Tech note
              and an Observe prompt stay visually distinct without per-manual markup. -->
@@ -137,7 +137,7 @@
              white: the figure then reads as part of the page instead of a lit
              rectangle pasted onto it. Pure black, not a theme surface brush, so the
              PNG's own background disappears into the card with no visible seam where
-             the image ends. Clicking opens the full colour PDF, same as the button at
+             the image ends. Clicking opens the full color PDF, same as the button at
              the top. -->
         <DataTemplate DataType="{x:Type mdl:ImageBlock}">
             <StackPanel Margin="0,4,0,14"
@@ -426,9 +426,28 @@
 
                 <!-- Body is indented under its heading. The section titles then form a
                      clear left edge to scan down, and long runs of prose stop butting
-                     against the same margin as the headings that organise them. -->
+                     against the same margin as the headings that organize them. -->
                 <ItemsControl ItemsSource="{Binding Blocks}" Margin="16,0,0,0"
                               Visibility="{Binding ShowContent, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                <!-- Export sits at the end of the quiz, not in the manual header: it's
+                     the thing you do once you've finished answering, so it belongs
+                     where you finish. Shown only for a section that actually contains
+                     answerable content (see ManualSectionViewModel.HasQuiz). -->
+                <Border Margin="16,10,0,0" Padding="12,10" CornerRadius="5"
+                        Background="{StaticResource BgBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        Visibility="{Binding HasQuiz, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel>
+                        <TextBlock Text="Finished this section?" FontWeight="SemiBold" FontSize="12"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,3,0,8"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Text="Save your answers as a PDF, with the correct answers alongside, to show the lab is complete."/>
+                        <Button Content="Export answers (PDF)" Click="OnExportAnswersClick"
+                                HorizontalAlignment="Left" FontSize="11" Padding="11,5"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </DataTemplate>
     </UserControl.Resources>
@@ -444,8 +463,14 @@
         <DockPanel Grid.Column="0" Margin="0,0,10,0">
             <TextBlock DockPanel.Dock="Top" Text="CONTENTS" FontSize="10" FontWeight="Bold" Margin="0,0,0,6"
                        Foreground="{StaticResource TextSecondaryBrush}"/>
+            <!-- No scroll bars in the contents column - see the matching note on the
+                 slots list in MainWindow.xaml. Horizontal scrolling off is what lets
+                 a long section title wrap inside the fixed width instead of clipping
+                 itself behind a scroll bar. -->
             <ListBox ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection}"
-                     Background="Transparent" BorderThickness="0">
+                     Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="Cursor" Value="Hand"/>
@@ -548,11 +573,17 @@
                      it's the reference a learner reaches for mid-task, not something
                      read once in order. Opens in the system PDF viewer so it can sit
                      beside the app, zoomed. -->
-                <StackPanel Orientation="Horizontal" Margin="0,14,0,0"
-                            Visibility="{Binding HasSchematic, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                     <Button Content="◱  Open schematic (PDF)" Command="{Binding OpenSchematicCommand}"
-                            FontSize="11" Padding="11,5"
-                            ToolTip="{Binding SchematicPath}"/>
+                            FontSize="11" Padding="11,5" Margin="0,0,8,0"
+                            ToolTip="{Binding SchematicPath}"
+                            Visibility="{Binding HasSchematic, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <!-- Quick recall after the manual has been worked through: just the
+                         formulas and the takeaways, in its own window so it can sit
+                         beside the app. -->
+                    <Button Content="Cheat sheet" Click="OnCheatSheetClick"
+                            FontSize="11" Padding="11,5" Margin="0,0,8,0"
+                            ToolTip="A one-page reference: this module's tech notes and key takeaways"/>
                 </StackPanel>
                 <TextBlock Text="{Binding SchematicError}" TextWrapping="Wrap" FontSize="10" Margin="0,4,0,0"
                            Foreground="{StaticResource AccentOrangeBrush}"
